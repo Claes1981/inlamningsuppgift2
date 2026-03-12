@@ -61,7 +61,7 @@ az vm create \
   --resource-group DemoRG \
   --name WebServer \
   --image Ubuntu2204 \
-  --size Standard_F1als_v7 \
+  --size Standard_B1ls \
   --admin-username azureuser \
   --vnet-name DemoVNet \
   --subnet default \
@@ -74,7 +74,7 @@ az vm create \
   --resource-group DemoRG \
   --name ReverseProxy \
   --image Ubuntu2204 \
-  --size Standard_F1als_v7 \
+  --size Standard_B1ls \
   --admin-username azureuser \
   --vnet-name DemoVNet \
   --subnet default \
@@ -86,7 +86,7 @@ az vm create \
   --resource-group DemoRG \
   --name BastionHost \
   --image Ubuntu2204 \
-  --size Standard_F1als_v7 \
+  --size Standard_B1ls \
   --admin-username azureuser \
   --vnet-name DemoVNet \
   --subnet default \
