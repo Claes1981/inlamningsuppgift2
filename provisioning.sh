@@ -1,159 +1,281 @@
 #!/usr/bin/env bash
 
-az group create --name DemoRG --location northeurope
+set -euo pipefail
 
-az network vnet create \
-  --resource-group DemoRG \
-  --name DemoVNet \
-  --address-prefix 10.0.0.0/16 \
-  --subnet-name default \
-  --subnet-prefix 10.0.0.0/24
+readonly SCRIPT_NAME="Azure Infrastructure Provisioning"
+readonly RESOURCE_GROUP="DemoRG"
+readonly LOCATION="northeurope"
 
-az network asg create \
-  --resource-group DemoRG \
-  --name ReverseProxyASG
+readonly VNET_NAME="DemoVNet"
+readonly VNET_ADDRESS_PREFIX="10.0.0.0/16"
+readonly SUBNET_NAME="default"
+readonly SUBNET_PREFIX="10.0.0.0/24"
 
-az network asg create \
-  --resource-group DemoRG \
-  --name BastionHostASG
+readonly NSG_NAME="DemoNSG"
 
-az network vnet list --resource-group DemoRG
+readonly REVERSE_PROXY_ASG="ReverseProxyASG"
+readonly BASTION_HOST_ASG="BastionHostASG"
 
-az network nsg create \
-  --resource-group DemoRG \
-  --name DemoNSG
+readonly VM_IMAGE="Ubuntu2204"
+readonly VM_SIZE="Standard_B1ls"
+readonly ADMIN_USERNAME="azureuser"
 
-az network nsg rule create \
-  --resource-group DemoRG \
-  --nsg-name DemoNSG \
-  --name AllowSSH \
-  --priority 1000 \
-  --access Allow \
-  --protocol Tcp \
-  --direction Inbound \
-  --source-address-prefixes Internet \
-  --source-port-ranges "*" \
-  --destination-asg BastionHostASG \
-  --destination-port-ranges 22
+readonly WEB_SERVER_NAME="WebServer"
+readonly REVERSE_PROXY_NAME="ReverseProxy"
+readonly BASTION_HOST_NAME="BastionHost"
 
-az network nsg rule create \
-  --resource-group DemoRG \
-  --nsg-name DemoNSG \
-  --name AllowHTTP \
-  --priority 2000 \
-  --access Allow \
-  --protocol Tcp \
-  --direction Inbound \
-  --source-address-prefixes Internet \
-  --source-port-ranges "*" \
-  --destination-asg ReverseProxyASG \
-  --destination-port-ranges 80
+readonly WEB_SERVER_CONFIG="web_server_config.yaml"
+readonly REVERSE_PROXY_CONFIG="reverse_proxy_config.yaml"
 
-az network vnet subnet update \
-  --resource-group DemoRG \
-  --vnet-name DemoVNet \
-  --name default \
-  --network-security-group DemoNSG
+log() {
+  echo "[INFO] $1"
+}
 
-az network nsg rule list --resource-group DemoRG --nsg-name DemoNSG --output table
+log_section() {
+  echo ""
+  echo "========================================"
+  echo "[SECTION] $1"
+  echo "========================================"
+  echo ""
+}
 
-az vm create \
-  --resource-group DemoRG \
-  --name WebServer \
-  --image Ubuntu2204 \
-  --size Standard_B1ls \
-  --admin-username azureuser \
-  --vnet-name DemoVNet \
-  --subnet default \
-  --nsg "" \
-  --public-ip-address "" \
-  --generate-ssh-keys \
-  --custom-data @web_server_config.yaml
+create_resource_group() {
+  log "Creating resource group: ${RESOURCE_GROUP}"
 
-az vm create \
-  --resource-group DemoRG \
-  --name ReverseProxy \
-  --image Ubuntu2204 \
-  --size Standard_B1ls \
-  --admin-username azureuser \
-  --vnet-name DemoVNet \
-  --subnet default \
-  --nsg "" \
-  --generate-ssh-keys \
-  --custom-data @reverse_proxy_config.yaml
+  az group create \
+    --name "${RESOURCE_GROUP}" \
+    --location "${LOCATION}"
+}
 
-az vm create \
-  --resource-group DemoRG \
-  --name BastionHost \
-  --image Ubuntu2204 \
-  --size Standard_B1ls \
-  --admin-username azureuser \
-  --vnet-name DemoVNet \
-  --subnet default \
-  --nsg "" \
-  --generate-ssh-keys
+create_virtual_network() {
+  log "Creating virtual network: ${VNET_NAME}"
 
-az vm list --resource-group DemoRG --output table
+  az network vnet create \
+    --resource-group "${RESOURCE_GROUP}" \
+    --name "${VNET_NAME}" \
+    --address-prefix "${VNET_ADDRESS_PREFIX}" \
+    --subnet-name "${SUBNET_NAME}" \
+    --subnet-prefix "${SUBNET_PREFIX}"
 
-REVERSE_PROXY_NIC_ID=$(az vm show \
-  --resource-group DemoRG \
-  --name ReverseProxy \
-  --query 'networkProfile.networkInterfaces[0].id' \
-  --output tsv)
+  log "Listing virtual networks in resource group"
+  az network vnet list \
+    --resource-group "${RESOURCE_GROUP}"
+}
 
-REVERSE_PROXY_NIC_NAME=$(basename $REVERSE_PROXY_NIC_ID)
+create_application_security_group() {
+  local asg_name="$1"
 
-REVERSE_PROXY_NIC_IP_CONFIG=$(az network nic show \
-  --resource-group DemoRG \
-  --name $REVERSE_PROXY_NIC_NAME \
-  --query 'ipConfigurations[0].name' \
-  --output tsv)
+  log "Creating application security group: ${asg_name}"
 
-az network nic ip-config update \
-  --resource-group DemoRG \
-  --nic-name $REVERSE_PROXY_NIC_NAME \
-  --name $REVERSE_PROXY_NIC_IP_CONFIG \
-  --application-security-groups ReverseProxyASG
+  az network asg create \
+    --resource-group "${RESOURCE_GROUP}" \
+    --name "${asg_name}"
+}
 
-BASTION_HOST_NIC_ID=$(az vm show \
-  --resource-group DemoRG \
-  --name BastionHost \
-  --query 'networkProfile.networkInterfaces[0].id' \
-  --output tsv)
+create_application_security_groups() {
+  log_section "Creating Application Security Groups"
 
-BASTION_HOST_NIC_NAME=$(basename $BASTION_HOST_NIC_ID)
+  create_application_security_group "${REVERSE_PROXY_ASG}"
+  create_application_security_group "${BASTION_HOST_ASG}"
+}
 
-BASTION_HOST_NIC_IP_CONFIG=$(az network nic show \
-  --resource-group DemoRG \
-  --name $BASTION_HOST_NIC_NAME \
-  --query 'ipConfigurations[0].name' \
-  --output tsv)
+create_network_security_group() {
+  log "Creating network security group: ${NSG_NAME}"
 
-az network nic ip-config update \
-  --resource-group DemoRG \
-  --nic-name $BASTION_HOST_NIC_NAME \
-  --name $BASTION_HOST_NIC_IP_CONFIG \
-  --application-security-groups BastionHostASG
+  az network nsg create \
+    --resource-group "${RESOURCE_GROUP}" \
+    --name "${NSG_NAME}"
+}
 
-az network nic show --resource-group DemoRG --name $REVERSE_PROXY_NIC_NAME --query 'ipConfigurations[0].applicationSecurityGroups'
+create_nsg_rule() {
+  local rule_name="$1"
+  local priority="$2"
+  local protocol="$3"
+  local destination_asg="$4"
+  local destination_port="$5"
 
-REVERSE_PROXY_IP=$(az vm show \
-  --resource-group DemoRG \
-  --name ReverseProxy \
-  --show-details \
-  --query 'publicIps' \
-  --output tsv)
+  log "Creating NSG rule: ${rule_name} (priority: ${priority})"
 
-echo "Reverse Proxy IP: $REVERSE_PROXY_IP"
+  az network nsg rule create \
+    --resource-group "${RESOURCE_GROUP}" \
+    --nsg-name "${NSG_NAME}" \
+    --name "${rule_name}" \
+    --priority "${priority}" \
+    --access Allow \
+    --protocol "${protocol}" \
+    --direction Inbound \
+    --source-address-prefixes Internet \
+    --source-port-ranges "*" \
+    --destination-asg "${destination_asg}" \
+    --destination-port-ranges "${destination_port}"
+}
 
-curl http://$REVERSE_PROXY_IP
+configure_network_security_group() {
+  log_section "Configuring Network Security Group"
 
-BASTION_IP=$(az vm show \
-  --resource-group DemoRG \
-  --name BastionHost \
-  --show-details \
-  --query 'publicIps' \
-  --output tsv)
+  create_network_security_group
 
-echo "Bastion Host IP: $BASTION_IP"
+  create_nsg_rule "AllowSSH" 1000 Tcp "${BASTION_HOST_ASG}" 22
+  create_nsg_rule "AllowHTTP" 2000 Tcp "${REVERSE_PROXY_ASG}" 80
 
+  log "Associating NSG with subnet"
+
+  az network vnet subnet update \
+    --resource-group "${RESOURCE_GROUP}" \
+    --vnet-name "${VNET_NAME}" \
+    --name "${SUBNET_NAME}" \
+    --network-security-group "${NSG_NAME}"
+
+  log "Listing NSG rules"
+  az network nsg rule list \
+    --resource-group "${RESOURCE_GROUP}" \
+    --nsg-name "${NSG_NAME}" \
+    --output table
+}
+
+create_virtual_machine() {
+  local vm_name="$1"
+  local custom_data="${2:-}"
+
+  log "Creating virtual machine: ${vm_name}"
+
+  local vm_args=(
+    --resource-group "${RESOURCE_GROUP}"
+    --name "${vm_name}"
+    --image "${VM_IMAGE}"
+    --size "${VM_SIZE}"
+    --admin-username "${ADMIN_USERNAME}"
+    --vnet-name "${VNET_NAME}"
+    --subnet "${SUBNET_NAME}"
+    --nsg ""
+    --public-ip-address ""
+    --generate-ssh-keys
+  )
+
+  if [[ -n "${custom_data}" ]]; then
+    vm_args+=(--custom-data "@${custom_data}")
+  fi
+
+  az vm create "${vm_args[@]}"
+}
+
+create_virtual_machines() {
+  log_section "Creating Virtual Machines"
+
+  create_virtual_machine "${WEB_SERVER_NAME}" "${WEB_SERVER_CONFIG}"
+  create_virtual_machine "${REVERSE_PROXY_NAME}" "${REVERSE_PROXY_CONFIG}"
+  create_virtual_machine "${BASTION_HOST_NAME}"
+}
+
+get_vm_nic_name() {
+  local vm_name="$1"
+
+  az vm show \
+    --resource-group "${RESOURCE_GROUP}" \
+    --name "${vm_name}" \
+    --query 'networkProfile.networkInterfaces[0].id' \
+    --output tsv | xargs basename
+}
+
+assign_asg_to_vm_nic() {
+  local vm_name="$1"
+  local asg_name="$2"
+
+  log "Assigning ASG '${asg_name}' to VM '${vm_name}' NIC"
+
+  local nic_name
+  nic_name=$(get_vm_nic_name "${vm_name}")
+
+  local ip_config_name
+  ip_config_name=$(az network nic show \
+    --resource-group "${RESOURCE_GROUP}" \
+    --name "${nic_name}" \
+    --query 'ipConfigurations[0].name' \
+    --output tsv)
+
+  az network nic ip-config update \
+    --resource-group "${RESOURCE_GROUP}" \
+    --nic-name "${nic_name}" \
+    --name "${ip_config_name}" \
+    --application-security-groups "${asg_name}"
+}
+
+assign_application_security_groups() {
+  log_section "Assigning Application Security Groups to VMs"
+
+  assign_asg_to_vm_nic "${REVERSE_PROXY_NAME}" "${REVERSE_PROXY_ASG}"
+  assign_asg_to_vm_nic "${BASTION_HOST_NAME}" "${BASTION_HOST_ASG}"
+
+  log "Verifying ASG assignment for reverse proxy"
+  local nic_name
+  nic_name=$(get_vm_nic_name "${REVERSE_PROXY_NAME}")
+
+  az network nic show \
+    --resource-group "${RESOURCE_GROUP}" \
+    --name "${nic_name}" \
+    --query 'ipConfigurations[0].applicationSecurityGroups'
+}
+
+get_vm_public_ip() {
+  local vm_name="$1"
+
+  az vm show \
+    --resource-group "${RESOURCE_GROUP}" \
+    --name "${vm_name}" \
+    --show-details \
+    --query 'publicIps' \
+    --output tsv
+}
+
+display_vm_list() {
+  log_section "Virtual Machine List"
+
+  az vm list \
+    --resource-group "${RESOURCE_GROUP}" \
+    --output table
+}
+
+display_connection_info() {
+  log_section "Connection Information"
+
+  local reverse_proxy_ip
+  reverse_proxy_ip=$(get_vm_public_ip "${REVERSE_PROXY_NAME}")
+  echo "Reverse Proxy IP: ${reverse_proxy_ip}"
+
+  local bastion_host_ip
+  bastion_host_ip=$(get_vm_public_ip "${BASTION_HOST_NAME}")
+  echo "Bastion Host IP: ${bastion_host_ip}"
+}
+
+test_reverse_proxy() {
+  log_section "Testing Reverse Proxy"
+
+  local reverse_proxy_ip
+  reverse_proxy_ip=$(get_vm_public_ip "${REVERSE_PROXY_NAME}")
+
+  if [[ -n "${reverse_proxy_ip}" ]]; then
+    log "Testing HTTP connection to reverse proxy"
+    curl --fail --silent --max-time 10 "http://${reverse_proxy_ip}" || \
+      log "Warning: Reverse proxy not responding yet"
+  else
+    log "Warning: Reverse proxy IP not available"
+  fi
+}
+
+main() {
+  log_section "${SCRIPT_NAME}"
+
+  create_resource_group
+  create_virtual_network
+  create_application_security_groups
+  configure_network_security_group
+  create_virtual_machines
+  assign_application_security_groups
+  display_vm_list
+  display_connection_info
+  test_reverse_proxy
+
+  log_section "Provisioning Complete"
+}
+
+main "$@"
