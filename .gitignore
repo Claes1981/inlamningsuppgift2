@@ -1,0 +1,69 @@
+## .NET Core
+bin/
+obj/
+[Oo]bj/
+[Bb]in/
+
+## Visual Studio
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+## Visual Studio Code
+.vscode/
+*.code-workspace
+
+## JetBrains Rider
+.idea/
+*.sln.iml
+
+## Build results
+[Dd]ist/
+[xX]mllc/
+
+## Azure
+*.zip
+*.tar.gz
+azure-pipelines.yml.override
+
+## Azure Functions
+*.json
+function.json
+host.json
+
+## Azure App Service
+*.log
+
+## Azure Key Vault
+*.pfx
+*.key
+
+## Local Azure Storage
+.azure/
+
+## Database
+*.mdf
+*.ldf
+*.sdf
+
+## Environment variables
+.env
+*.env
+appsettings.Development.json
+appsettings.*.json
+
+## Logs
+logs/
+*.log
+
+## OS
+.DS_Store
+Thumbs.db
+
+## Temporary files
+*.tmp
+*.bak
+*.swp
+*~
