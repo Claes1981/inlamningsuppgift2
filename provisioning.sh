@@ -4,7 +4,7 @@ set -euo pipefail
 
 readonly SCRIPT_NAME="Azure Infrastructure Provisioning"
 readonly RESOURCE_GROUP="DemoRG"
-readonly LOCATION="northeurope"
+readonly LOCATION="denmarkeast"
 
 readonly VNET_NAME="DemoVNet"
 readonly VNET_ADDRESS_PREFIX="10.0.0.0/16"
