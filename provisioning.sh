@@ -27,6 +27,9 @@ readonly BASTION_HOST_NAME="BastionHost"
 readonly WEB_SERVER_CONFIG="web_server_config.yaml"
 readonly REVERSE_PROXY_CONFIG="reverse_proxy_config.yaml"
 
+readonly MAX_RETRY_ATTEMPTS=30
+readonly RETRY_DELAY_SECONDS=2
+
 log() {
   echo "[INFO] $1"
 }
@@ -37,6 +40,36 @@ log_section() {
   echo "[SECTION] $1"
   echo "========================================"
   echo ""
+}
+
+wait_for_resource() {
+  local resource_type="$1"
+  local resource_name="$2"
+  local query="$3"
+
+  log "Waiting for ${resource_type} '${resource_name}' to be available..."
+
+  local attempt=0
+
+  while [[ ${attempt} -lt ${MAX_RETRY_ATTEMPTS} ]]; do
+    attempt=$((attempt + 1))
+
+    if az resource show \
+      --resource-group "${RESOURCE_GROUP}" \
+      --resource-type "${resource_type}" \
+      --name "${resource_name}" \
+      --query "${query}" \
+      --output tsv > /dev/null 2>&1; then
+      log "${resource_type} '${resource_name}' is ready"
+      return 0
+    fi
+
+    log "Attempt ${attempt}/${MAX_RETRY_ATTEMPTS}: Resource not ready yet, waiting ${RETRY_DELAY_SECONDS}s..."
+    sleep "${RETRY_DELAY_SECONDS}"
+  done
+
+  log "Error: ${resource_type} '${resource_name}' did not become available within ${MAX_RETRY_ATTEMPTS} attempts"
+  return 1
 }
 
 create_resource_group() {
@@ -85,6 +118,8 @@ create_network_security_group() {
   az network nsg create \
     --resource-group "${RESOURCE_GROUP}" \
     --name "${NSG_NAME}"
+
+  wait_for_resource "Microsoft.Network/networkSecurityGroups" "${NSG_NAME}" "provisioningState"
 }
 
 create_nsg_rule() {
