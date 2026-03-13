@@ -5,16 +5,7 @@ set -euo pipefail
 readonly SCRIPT_NAME="Azure Infrastructure Provisioning"
 readonly RESOURCE_GROUP="DemoRG"
 readonly LOCATION="denmarkeast"
-
-readonly VNET_NAME="DemoVNet"
-readonly VNET_ADDRESS_PREFIX="10.0.0.0/16"
-readonly SUBNET_NAME="default"
-readonly SUBNET_PREFIX="10.0.0.0/24"
-
-readonly NSG_NAME="DemoNSG"
-
-readonly REVERSE_PROXY_ASG="ReverseProxyASG"
-readonly BASTION_HOST_ASG="BastionHostASG"
+readonly BICEP_FILE="infrastructure.bicep"
 
 readonly VM_IMAGE="Ubuntu2204"
 readonly VM_SIZE="Standard_B1ls"
@@ -80,175 +71,59 @@ create_resource_group() {
     --location "${LOCATION}"
 }
 
-create_virtual_network() {
-  log "Creating virtual network: ${VNET_NAME}"
+validate_bicep_file() {
+  log "Validating Bicep file: ${BICEP_FILE}"
 
-  az network vnet create \
-    --resource-group "${RESOURCE_GROUP}" \
-    --name "${VNET_NAME}" \
-    --address-prefix "${VNET_ADDRESS_PREFIX}" \
-    --subnet-name "${SUBNET_NAME}" \
-    --subnet-prefix "${SUBNET_PREFIX}"
-
-  log "Listing virtual networks in resource group"
-  az network vnet list \
-    --resource-group "${RESOURCE_GROUP}"
-}
-
-create_application_security_group() {
-  local asg_name="$1"
-
-  log "Creating application security group: ${asg_name}"
-
-  az network asg create \
-    --resource-group "${RESOURCE_GROUP}" \
-    --name "${asg_name}"
-}
-
-create_application_security_groups() {
-  log_section "Creating Application Security Groups"
-
-  create_application_security_group "${REVERSE_PROXY_ASG}"
-  create_application_security_group "${BASTION_HOST_ASG}"
-}
-
-create_network_security_group() {
-  log "Creating network security group: ${NSG_NAME}"
-
-  az network nsg create \
-    --resource-group "${RESOURCE_GROUP}" \
-    --name "${NSG_NAME}"
-
-  wait_for_resource "Microsoft.Network/networkSecurityGroups" "${NSG_NAME}" "provisioningState"
-}
-
-create_nsg_rule() {
-  local rule_name="$1"
-  local priority="$2"
-  local protocol="$3"
-  local destination_asg="$4"
-  local destination_port="$5"
-
-  log "Creating NSG rule: ${rule_name} (priority: ${priority})"
-
-  az network nsg rule create \
-    --resource-group "${RESOURCE_GROUP}" \
-    --nsg-name "${NSG_NAME}" \
-    --name "${rule_name}" \
-    --priority "${priority}" \
-    --access Allow \
-    --protocol "${protocol}" \
-    --direction Inbound \
-    --source-address-prefixes Internet \
-    --source-port-ranges "*" \
-    --destination-asg "${destination_asg}" \
-    --destination-port-ranges "${destination_port}"
-}
-
-configure_network_security_group() {
-  log_section "Configuring Network Security Group"
-
-  create_network_security_group
-
-  create_nsg_rule "AllowSSH" 1000 Tcp "${BASTION_HOST_ASG}" 22
-  create_nsg_rule "AllowHTTP" 2000 Tcp "${REVERSE_PROXY_ASG}" 80
-
-  log "Associating NSG with subnet"
-
-  az network vnet subnet update \
-    --resource-group "${RESOURCE_GROUP}" \
-    --vnet-name "${VNET_NAME}" \
-    --name "${SUBNET_NAME}" \
-    --network-security-group "${NSG_NAME}"
-
-  log "Listing NSG rules"
-  az network nsg rule list \
-    --resource-group "${RESOURCE_GROUP}" \
-    --nsg-name "${NSG_NAME}" \
-    --output table
-}
-
-create_virtual_machine() {
-  local vm_name="$1"
-  local custom_data="${2:-}"
-
-  log "Creating virtual machine: ${vm_name}"
-
-  local vm_args=(
-    --resource-group "${RESOURCE_GROUP}"
-    --name "${vm_name}"
-    --image "${VM_IMAGE}"
-    --size "${VM_SIZE}"
-    --admin-username "${ADMIN_USERNAME}"
-    --vnet-name "${VNET_NAME}"
-    --subnet "${SUBNET_NAME}"
-    --nsg ""
-    --public-ip-address ""
-    --generate-ssh-keys
-  )
-
-  if [[ -n "${custom_data}" ]]; then
-    vm_args+=(--custom-data "@${custom_data}")
+  if [[ ! -f "${BICEP_FILE}" ]]; then
+    log "Error: Bicep file '${BICEP_FILE}' not found"
+    return 1
   fi
 
-  az vm create "${vm_args[@]}"
+  if ! az bicep build --file "${BICEP_FILE}" > /dev/null 2>&1; then
+    log "Error: Bicep file validation failed"
+    return 1
+  fi
+
+  log "Bicep file validation successful"
 }
 
-create_virtual_machines() {
-  log_section "Creating Virtual Machines"
+deploy_infrastructure() {
+  log_section "Deploying Infrastructure with Bicep"
 
-  create_virtual_machine "${WEB_SERVER_NAME}" "${WEB_SERVER_CONFIG}"
-  create_virtual_machine "${REVERSE_PROXY_NAME}" "${REVERSE_PROXY_CONFIG}"
-  create_virtual_machine "${BASTION_HOST_NAME}"
+  log "Deploying Bicep template to resource group: ${RESOURCE_GROUP}"
+
+  az deployment group create \
+    --resource-group "${RESOURCE_GROUP}" \
+    --template-file "${BICEP_FILE}" \
+    --parameters "location=${LOCATION}" \
+    --query 'properties.outputs' \
+    --output json > /tmp/deployment_outputs.json
+
+  log "Infrastructure deployment completed"
 }
 
-get_vm_nic_name() {
-  local vm_name="$1"
+apply_cloud_init_configurations() {
+  log_section "Applying Cloud-Init Configurations"
 
-  az vm show \
-    --resource-group "${RESOURCE_GROUP}" \
-    --name "${vm_name}" \
-    --query 'networkProfile.networkInterfaces[0].id' \
-    --output tsv | xargs basename
-}
+  if [[ -f "${WEB_SERVER_CONFIG}" ]]; then
+    log "Applying cloud-init configuration to web server"
 
-assign_asg_to_vm_nic() {
-  local vm_name="$1"
-  local asg_name="$2"
+    az vm run-command invoke \
+      --resource-group "${RESOURCE_GROUP}" \
+      --name "${WEB_SERVER_NAME}" \
+      --command-id RunShellScript \
+      --scripts "$(cat "${WEB_SERVER_CONFIG}" | base64 -w0)"
+  fi
 
-  log "Assigning ASG '${asg_name}' to VM '${vm_name}' NIC"
+  if [[ -f "${REVERSE_PROXY_CONFIG}" ]]; then
+    log "Applying cloud-init configuration to reverse proxy"
 
-  local nic_name
-  nic_name=$(get_vm_nic_name "${vm_name}")
-
-  local ip_config_name
-  ip_config_name=$(az network nic show \
-    --resource-group "${RESOURCE_GROUP}" \
-    --name "${nic_name}" \
-    --query 'ipConfigurations[0].name' \
-    --output tsv)
-
-  az network nic ip-config update \
-    --resource-group "${RESOURCE_GROUP}" \
-    --nic-name "${nic_name}" \
-    --name "${ip_config_name}" \
-    --application-security-groups "${asg_name}"
-}
-
-assign_application_security_groups() {
-  log_section "Assigning Application Security Groups to VMs"
-
-  assign_asg_to_vm_nic "${REVERSE_PROXY_NAME}" "${REVERSE_PROXY_ASG}"
-  assign_asg_to_vm_nic "${BASTION_HOST_NAME}" "${BASTION_HOST_ASG}"
-
-  log "Verifying ASG assignment for reverse proxy"
-  local nic_name
-  nic_name=$(get_vm_nic_name "${REVERSE_PROXY_NAME}")
-
-  az network nic show \
-    --resource-group "${RESOURCE_GROUP}" \
-    --name "${nic_name}" \
-    --query 'ipConfigurations[0].applicationSecurityGroups'
+    az vm run-command invoke \
+      --resource-group "${RESOURCE_GROUP}" \
+      --name "${REVERSE_PROXY_NAME}" \
+      --command-id RunShellScript \
+      --scripts "$(cat "${REVERSE_PROXY_CONFIG}" | base64 -w0)"
+  fi
 }
 
 get_vm_public_ip() {
@@ -301,11 +176,9 @@ main() {
   log_section "${SCRIPT_NAME}"
 
   create_resource_group
-  create_virtual_network
-  create_application_security_groups
-  configure_network_security_group
-  create_virtual_machines
-  assign_application_security_groups
+  validate_bicep_file
+  deploy_infrastructure
+  apply_cloud_init_configurations
   display_vm_list
   display_connection_info
   test_reverse_proxy
