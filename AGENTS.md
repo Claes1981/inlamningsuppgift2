@@ -1,12 +1,11 @@
 # Agent Instructions for Azure Infrastructure Provisioning
 
 ## Project Overview
-This project provisions a .NET web application infrastructure to Azure using Bash scripts and cloud-init configurations. The infrastructure includes:
+This project provisions Azure infrastructure using Bicep templates and Bash scripts. The infrastructure includes:
 - Resource Group in denmarkeast
-- Virtual Network (10.0.0.0/16)
-- Network Security Group with custom rules
-- Application Security Groups for traffic segmentation
-- Three Ubuntu VMs: Web Server, Reverse Proxy, and Bastion Host
+- Virtual Network (10.0.0.0/16) with single subnet
+- Network Security Group with ASG-based rules
+- Three Ubuntu 24.04 LTS VMs: Web Server, Reverse Proxy, and Bastion Host
 - NGINX-based reverse proxy configuration
 
 ## Build/Lint/Test Commands
@@ -23,11 +22,13 @@ shellcheck provisioning.sh
 ./provisioning.sh
 ```
 
-### Cloud-Config Validation
+### Bicep Validation
 ```bash
-# Validate cloud-config syntax
-cloud-config-validate reverse_proxy_config.yaml
-cloud-config-validate web_server_config.yaml
+# Validate Bicep syntax
+az bicep build --file infrastructure.bicep
+
+# Build for inspection
+az bicep build --file infrastructure.bicep --stdout
 ```
 
 ### Manual Testing
@@ -37,6 +38,9 @@ curl http://<REVERSE_PROXY_IP>
 
 # SSH to bastion host
 ssh azureuser@<BASTION_IP>
+
+# SSH to internal VMs via bastion
+ssh -o ProxyJump="azureuser@<BASTION_IP>" azureuser@10.0.0.4
 ```
 
 ## Code Style Guidelines
@@ -47,14 +51,14 @@ ssh azureuser@<BASTION_IP>
 - Use `set -euo pipefail` at script start for strict error handling
 - Define all configuration as `readonly` constants at the top
 - Group related constants with blank lines
-- Use descriptive function names in snake_case (e.g., `create_network_security_group`)
+- Use descriptive function names in snake_case (e.g., `create_resource_group`)
 - Each function should handle a single responsibility (SRP)
 - Use `log()` and `log_section()` for all output
 - Implement retry logic with exponential backoff for Azure API calls
 
 #### Naming Conventions
 - Constants: SCREAMING_SNAKE_CASE (e.g., `RESOURCE_GROUP`, `NSG_NAME`)
-- Functions: snake_case (e.g., `create_virtual_machine`)
+- Functions: snake_case (e.g., `deploy_infrastructure`)
 - Local variables: snake_case (e.g., `nic_name`, `ip_config_name`)
 - Use `local` keyword for all function-scoped variables
 
@@ -72,34 +76,42 @@ ssh azureuser@<BASTION_IP>
 - Use arrays for command arguments to handle spaces properly
 - Quote all variable expansions: `"${variable}"`
 
-### YAML (Cloud-Config)
+### Bicep Templates
+
+#### Structure
+- Use `@description()` for all parameters
+- Use `@secure()` for sensitive parameters (SSH keys, passwords)
+- Provide sensible defaults for non-sensitive parameters
+- Use consistent resource naming: `${name}${suffix}` (e.g., `${vmName}Nic`)
+- Group related resources logically with comments
+- Use `dependsOn` explicitly when implicit dependencies are unclear
+
+#### Naming Conventions
+- Parameters: camelCase (e.g., `adminUsername`, `vnetAddressPrefix`)
+- Resources: camelCase (e.g., `reverseProxyAsg`, `webServerVm`)
+- Outputs: camelCase (e.g., `reverseProxyPublicIp`)
+
+#### Best Practices
+- Use latest stable API versions (e.g., `@2024-03-01`)
+- Use Application Security Groups for traffic segmentation
+- Associate NSG at subnet level, not individual NICs
+- Use `standard` SKU for public IPs
+- Disable password authentication on Linux VMs
+
+### Cloud-Init (Shell Script Format)
 
 #### Structure
 - Use `#cloud-config` header on first line
-- Follow canonical cloud-init format
-- Use 2-space indentation
+- Set `package_update: false` and `package_upgrade: false` to avoid timeouts
+- Use 2-space indentation for YAML
 - Group packages, write_files, runcmd logically
+- Base64 encode in provisioning script before passing to Bicep
 
 #### NGINX Configuration
 - Follow standard NGINX config syntax
 - Use descriptive server blocks
 - Include security headers in reverse proxy configs
 - Document port choices in comments
-
-### Azure CLI Commands
-
-#### Best Practices
-- Always specify `--resource-group` explicitly
-- Use `--output tsv` for scripting, `--output table` for display
-- Quote values: `--name "${RESOURCE_GROUP}"`
-- Use `--query` for extracting specific fields
-- Implement polling for long-running operations
-
-#### Resource Management
-- Use Application Security Groups for traffic segmentation
-- Associate NSG at subnet level, not individual NICs
-- Wait for resource provisioning state before dependent operations
-- Clean up resources in reverse creation order
 
 ## Architecture Patterns
 
@@ -115,19 +127,26 @@ ssh azureuser@<BASTION_IP>
 - Implement idempotent operations where possible
 - Document resource relationships and dependencies
 
+### Security
+- Use SSH key authentication (no passwords)
+- Web Server has no public IP (internal only)
+- Bastion Host for SSH access to internal VMs
+- NSG rules follow least privilege principle
+
 ## Common Tasks
 
 ### Adding a New VM
-1. Add VM constant names (NAME, CONFIG if needed)
-2. Call `create_virtual_machine()` in `create_virtual_machines()`
-3. Create ASG if needed
-4. Assign ASG to VM NIC in `assign_application_security_groups()`
-5. Add NSG rules if new ports required
+1. Add VM name parameter to `infrastructure.bicep`
+2. Create NIC resource (with or without public IP)
+3. Create VM resource with cloud-init if needed
+4. Add ASG if new traffic segmentation required
+5. Assign ASG to NIC IP configuration
+6. Add NSG rules if new ports required
 
 ### Modifying Network Security
-1. Add `create_nsg_rule()` call with unique priority
+1. Add security rule to NSG in Bicep with unique priority
 2. Priority order: lower numbers = higher priority
-3. Use ASGs for destination, not IP addresses
+3. Use ASGs for destination when possible
 4. Default deny, explicit allow rules only
 
 ### Debugging
@@ -135,18 +154,21 @@ ssh azureuser@<BASTION_IP>
 2. Verify resource group: `az group show --name ${RESOURCE_GROUP}`
 3. Check resource state: `az resource show --resource-type ...`
 4. Enable verbose logging: add `--debug` to az commands
+5. Check deployment outputs: `cat /tmp/deployment_outputs.json`
 
 ## Files Reference
-- `provisioning.sh` - Main Azure infrastructure provisioning script
-- `reverse_proxy_config.yaml` - Cloud-init config for reverse proxy VM
-- `web_server_config.yaml` - Cloud-init config for web server VM
-- `.gitignore` - Git ignore patterns for Azure/.NET projects
+- `infrastructure.bicep` - Bicep template for all Azure resources
+- `provisioning.sh` - Main deployment script with SSH key handling
+- `cloud-init_webserver.sh` - Cloud-init for web server (nginx on 8080)
+- `cloud-init_reverseproxy.sh` - Cloud-init for reverse proxy (nginx on 80)
+- `dev.bicepparam` - Parameter file (created but not used)
 
 ## Environment Variables
 No environment variables required. All configuration is in script constants.
 
 ## Dependencies
 - Azure CLI (az) version 2.0+
+- Bicep CLI (az bicep)
 - Bash 4.0+
 - Cloud-init (on VMs)
 - NGINX (on VMs)
