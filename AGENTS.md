@@ -161,6 +161,7 @@ ssh -o ProxyJump="azureuser@<BASTION_IP>" azureuser@10.0.0.4
 - `provisioning.sh` - Main deployment script with SSH key handling
 - `cloud-init_webserver.sh` - Cloud-init for web server (nginx on 8080)
 - `cloud-init_reverseproxy.sh` - Cloud-init for reverse proxy (nginx on 80)
+- `cloud-init_bastion.sh` - Cloud-init for bastion host (SSH service)
 - `dev.bicepparam` - Parameter file (created but not used)
 
 ## Environment Variables
