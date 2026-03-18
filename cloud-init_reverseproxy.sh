@@ -8,7 +8,7 @@ write_files:
   - path: /etc/nginx/sites-available/default
     content: |
       upstream webserver {
-          server 10.0.0.5:8080;
+          server 10.0.0.4:8080;
       }
 
       server {
