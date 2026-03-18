@@ -1,0 +1,31 @@
+#cloud-config
+package_update: false
+package_upgrade: false
+packages:
+  - nginx
+
+write_files:
+  - path: /var/www/html/index.html
+    content: |
+      <!DOCTYPE html>
+      <html>
+      <head>
+          <title>Hello World!</title>
+      </head>
+      <body>
+          <h1>Hello World!</h1>
+      </body>
+      </html>
+
+  - path: /etc/nginx/sites-available/default
+    content: |
+      server {
+          listen 8080 default_server;
+          server_name _;
+          root /var/www/html;
+          index index.html;
+      }
+
+runcmd:
+  - systemctl restart nginx
+  - systemctl enable nginx

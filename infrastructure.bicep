@@ -28,6 +28,10 @@ param vmSize string = 'Standard_B1ls'
 @description('Admin username for VMs')
 param adminUsername string = 'azureuser'
 
+@description('Admin public SSH key for VMs')
+@secure()
+param adminPublicKey string
+
 @description('Web server VM name')
 param webServerName string = 'WebServer'
 
@@ -36,6 +40,12 @@ param reverseProxyName string = 'ReverseProxy'
 
 @description('Bastion host VM name')
 param bastionHostName string = 'BastionHost'
+
+@description('Cloud-init configuration for web server (YAML format, base64 encoded by provisioning script)')
+param webServerCloudInit string
+
+@description('Cloud-init configuration for reverse proxy (YAML format, base64 encoded by provisioning script)')
+param reverseProxyCloudInit string
 
 // Application Security Groups
 resource reverseProxyAsg 'Microsoft.Network/applicationSecurityGroups@2024-03-01' = {
@@ -88,20 +98,13 @@ resource nsg 'Microsoft.Network/networkSecurityGroups@2024-03-01' = {
           access: 'Allow'
           protocol: 'Tcp'
           direction: 'Inbound'
-          sourceAddressPrefixes: [
-            'Internet'
-          ]
-          sourcePortRanges: [
-            '*'
-          ]
-          destinationAddressPrefixes: [
-            '*'
-          ]
-          destinationPortRanges: [
-            '22'
-          ]
+          sourceAddressPrefix: '*'
+          sourcePortRange: '*'
+          destinationPortRange: '22'
           destinationApplicationSecurityGroups: [
-            bastionHostAsg
+            {
+              id: bastionHostAsg.id
+            }
           ]
         }
       }
@@ -112,21 +115,27 @@ resource nsg 'Microsoft.Network/networkSecurityGroups@2024-03-01' = {
           access: 'Allow'
           protocol: 'Tcp'
           direction: 'Inbound'
-          sourceAddressPrefixes: [
-            'Internet'
-          ]
-          sourcePortRanges: [
-            '*'
-          ]
-          destinationAddressPrefixes: [
-            '*'
-          ]
-          destinationPortRanges: [
-            '80'
-          ]
+          sourceAddressPrefix: '*'
+          sourcePortRange: '*'
+          destinationPortRange: '80'
           destinationApplicationSecurityGroups: [
-            reverseProxyAsg
+            {
+              id: reverseProxyAsg.id
+            }
           ]
+        }
+      }
+      {
+        name: 'AllowInternalSSH'
+        properties: {
+          priority: 3000
+          access: 'Allow'
+          protocol: 'Tcp'
+          direction: 'Inbound'
+          sourceAddressPrefix: '10.0.0.0/16'
+          sourcePortRange: '*'
+          destinationAddressPrefix: '10.0.0.0/16'
+          destinationPortRange: '22'
         }
       }
     ]
@@ -143,18 +152,9 @@ resource subnetNsgAssociation 'Microsoft.Network/virtualNetworks/subnets@2024-03
       id: nsg.id
     }
   }
-}
-
-// Web Server Public IP
-resource webServerPublicIp 'Microsoft.Network/publicIPAddresses@2024-03-01' = {
-  name: '${webServerName}PublicIP'
-  location: location
-  sku: {
-    name: 'Basic'
-  }
-  properties: {
-    publicIPAllocationMethod: 'Dynamic'
-  }
+  dependsOn: [
+    nsg
+  ]
 }
 
 // Reverse Proxy Public IP
@@ -162,10 +162,10 @@ resource reverseProxyPublicIp 'Microsoft.Network/publicIPAddresses@2024-03-01' =
   name: '${reverseProxyName}PublicIP'
   location: location
   sku: {
-    name: 'Basic'
+    name: 'Standard'
   }
   properties: {
-    publicIPAllocationMethod: 'Dynamic'
+    publicIPAllocationMethod: 'Static'
   }
 }
 
@@ -174,14 +174,14 @@ resource bastionHostPublicIp 'Microsoft.Network/publicIPAddresses@2024-03-01' = 
   name: '${bastionHostName}PublicIP'
   location: location
   sku: {
-    name: 'Basic'
+    name: 'Standard'
   }
   properties: {
-    publicIPAllocationMethod: 'Dynamic'
+    publicIPAllocationMethod: 'Static'
   }
 }
 
-// Web Server NIC
+// Web Server NIC (no public IP)
 resource webServerNic 'Microsoft.Network/networkInterfaces@2024-03-01' = {
   name: '${webServerName}Nic'
   location: location
@@ -194,13 +194,13 @@ resource webServerNic 'Microsoft.Network/networkInterfaces@2024-03-01' = {
           subnet: {
             id: '${vnet.id}/subnets/${subnetName}'
           }
-          publicIPAddress: {
-            id: webServerPublicIp.id
-          }
         }
       }
     ]
   }
+  dependsOn: [
+    subnetNsgAssociation
+  ]
 }
 
 // Reverse Proxy NIC with ASG
@@ -220,12 +220,18 @@ resource reverseProxyNic 'Microsoft.Network/networkInterfaces@2024-03-01' = {
             id: reverseProxyPublicIp.id
           }
           applicationSecurityGroups: [
-            reverseProxyAsg
+            {
+              id: reverseProxyAsg.id
+            }
           ]
         }
       }
     ]
   }
+  dependsOn: [
+    subnetNsgAssociation
+    reverseProxyPublicIp
+  ]
 }
 
 // Bastion Host NIC with ASG
@@ -245,12 +251,18 @@ resource bastionHostNic 'Microsoft.Network/networkInterfaces@2024-03-01' = {
             id: bastionHostPublicIp.id
           }
           applicationSecurityGroups: [
-            bastionHostAsg
+            {
+              id: bastionHostAsg.id
+            }
           ]
         }
       }
     ]
   }
+  dependsOn: [
+    subnetNsgAssociation
+    bastionHostPublicIp
+  ]
 }
 
 // Web Server VM
@@ -264,13 +276,14 @@ resource webServerVm 'Microsoft.Compute/virtualMachines@2024-03-01' = {
     osProfile: {
       computerName: replace(webServerName, '-', '')
       adminUsername: adminUsername
+      customData: webServerCloudInit
       linuxConfiguration: {
         disablePasswordAuthentication: true
         ssh: {
           publicKeys: [
             {
               path: '/home/${adminUsername}/.ssh/authorized_keys'
-              keyData: ''
+              keyData: adminPublicKey
             }
           ]
         }
@@ -279,8 +292,8 @@ resource webServerVm 'Microsoft.Compute/virtualMachines@2024-03-01' = {
     storageProfile: {
       imageReference: {
         publisher: 'Canonical'
-        offer: '0001-com-ubuntu-server-jammy'
-        sku: '22_04-lts-gen2'
+        offer: 'ubuntu-24_04-lts'
+        sku: 'server'
         version: 'latest'
       }
       osDisk: {
@@ -314,13 +327,14 @@ resource reverseProxyVm 'Microsoft.Compute/virtualMachines@2024-03-01' = {
     osProfile: {
       computerName: replace(reverseProxyName, '-', '')
       adminUsername: adminUsername
+      customData: reverseProxyCloudInit
       linuxConfiguration: {
         disablePasswordAuthentication: true
         ssh: {
           publicKeys: [
             {
               path: '/home/${adminUsername}/.ssh/authorized_keys'
-              keyData: ''
+              keyData: adminPublicKey
             }
           ]
         }
@@ -329,8 +343,8 @@ resource reverseProxyVm 'Microsoft.Compute/virtualMachines@2024-03-01' = {
     storageProfile: {
       imageReference: {
         publisher: 'Canonical'
-        offer: '0001-com-ubuntu-server-jammy'
-        sku: '22_04-lts-gen2'
+        offer: 'ubuntu-24_04-lts'
+        sku: 'server'
         version: 'latest'
       }
       osDisk: {
@@ -370,7 +384,7 @@ resource bastionHostVm 'Microsoft.Compute/virtualMachines@2024-03-01' = {
           publicKeys: [
             {
               path: '/home/${adminUsername}/.ssh/authorized_keys'
-              keyData: ''
+              keyData: adminPublicKey
             }
           ]
         }
@@ -379,8 +393,8 @@ resource bastionHostVm 'Microsoft.Compute/virtualMachines@2024-03-01' = {
     storageProfile: {
       imageReference: {
         publisher: 'Canonical'
-        offer: '0001-com-ubuntu-server-jammy'
-        sku: '22_04-lts-gen2'
+        offer: 'ubuntu-24_04-lts'
+        sku: 'server'
         version: 'latest'
       }
       osDisk: {
@@ -404,6 +418,5 @@ resource bastionHostVm 'Microsoft.Compute/virtualMachines@2024-03-01' = {
 }
 
 // Outputs
-output webServerPublicIp string = webServerPublicIp.properties.ipAddress
 output reverseProxyPublicIp string = reverseProxyPublicIp.properties.ipAddress
 output bastionHostPublicIp string = bastionHostPublicIp.properties.ipAddress

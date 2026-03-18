@@ -7,16 +7,19 @@ readonly RESOURCE_GROUP="DemoRG"
 readonly LOCATION="denmarkeast"
 readonly BICEP_FILE="infrastructure.bicep"
 
-readonly VM_IMAGE="Ubuntu2204"
+readonly VM_IMAGE="Ubuntu2404"
 readonly VM_SIZE="Standard_B1ls"
 readonly ADMIN_USERNAME="azureuser"
+readonly SSH_KEY_FILE="${HOME}/.ssh/id_rsa.pub"
 
 readonly WEB_SERVER_NAME="WebServer"
 readonly REVERSE_PROXY_NAME="ReverseProxy"
 readonly BASTION_HOST_NAME="BastionHost"
 
-readonly WEB_SERVER_CONFIG="web_server_config.yaml"
-readonly REVERSE_PROXY_CONFIG="reverse_proxy_config.yaml"
+readonly BICEP_PARAM_FILE="dev.bicepparam"
+readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly CLOUD_INIT_WEBSERVER="${SCRIPT_DIR}/cloud-init_webserver.sh"
+readonly CLOUD_INIT_REVERSEPROXY="${SCRIPT_DIR}/cloud-init_reverseproxy.sh"
 
 readonly MAX_RETRY_ATTEMPTS=30
 readonly RETRY_DELAY_SECONDS=2
@@ -74,12 +77,12 @@ create_resource_group() {
 validate_bicep_file() {
   log "Validating Bicep file: ${BICEP_FILE}"
 
-  if [[ ! -f "${BICEP_FILE}" ]]; then
+  if [[ ! -f "${SCRIPT_DIR}/${BICEP_FILE}" ]]; then
     log "Error: Bicep file '${BICEP_FILE}' not found"
     return 1
   fi
 
-  if ! az bicep build --file "${BICEP_FILE}" > /dev/null 2>&1; then
+  if ! az bicep build --file "${SCRIPT_DIR}/${BICEP_FILE}" > /dev/null 2>&1; then
     log "Error: Bicep file validation failed"
     return 1
   fi
@@ -87,44 +90,88 @@ validate_bicep_file() {
   log "Bicep file validation successful"
 }
 
+get_or_generate_ssh_key() {
+  if [[ "${1:-}" == "--quiet" ]]; then
+    if [[ ! -f "${SSH_KEY_FILE}" ]]; then
+      mkdir -p "${HOME}/.ssh"
+      ssh-keygen -t rsa -b 4096 -f "${HOME}/.ssh/id_rsa" -N "" -q 2>/dev/null
+    fi
+    tr -d '\r\n' < "${SSH_KEY_FILE}"
+    return
+  fi
+
+  log_section "SSH Key Setup"
+
+  if [[ -f "${SSH_KEY_FILE}" ]]; then
+    log "Found existing SSH public key: ${SSH_KEY_FILE}"
+  else
+    log "No SSH key found, generating new key pair..."
+    mkdir -p "${HOME}/.ssh"
+    ssh-keygen -t rsa -b 4096 -f "${HOME}/.ssh/id_rsa" -N "" -q
+    log "Generated new SSH key pair"
+  fi
+
+  local ssh_key
+  ssh_key=$(tr -d '\r\n' < "${SSH_KEY_FILE}")
+  
+  log "SSH key length: ${#ssh_key} characters"
+  log "SSH key preview: ${ssh_key:0:50}..."
+  
+  echo "${ssh_key}"
+}
+
 deploy_infrastructure() {
   log_section "Deploying Infrastructure with Bicep"
 
+  get_or_generate_ssh_key
+
+  local admin_public_key
+  admin_public_key=$(get_or_generate_ssh_key --quiet)
+
+  local web_server_cloud_init
+  web_server_cloud_init=$(base64 -w0 < "${CLOUD_INIT_WEBSERVER}")
+
+  local reverse_proxy_cloud_init
+  reverse_proxy_cloud_init=$(base64 -w0 < "${CLOUD_INIT_REVERSEPROXY}")
+
   log "Deploying Bicep template to resource group: ${RESOURCE_GROUP}"
 
-  az deployment group create \
+  local params_file
+  params_file=$(mktemp)
+
+  cat > "${params_file}" << EOF
+{
+  "\$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "location": {
+      "value": "${LOCATION}"
+    },
+    "adminPublicKey": {
+      "value": "${admin_public_key}"
+    },
+    "webServerCloudInit": {
+      "value": "${web_server_cloud_init}"
+    },
+    "reverseProxyCloudInit": {
+      "value": "${reverse_proxy_cloud_init}"
+    }
+  }
+}
+EOF
+
+ az deployment group create \
     --resource-group "${RESOURCE_GROUP}" \
-    --template-file "${BICEP_FILE}" \
-    --parameters "location=${LOCATION}" \
+    --template-file "${SCRIPT_DIR}/${BICEP_FILE}" \
+    --parameters "@${params_file}" \
     --query 'properties.outputs' \
     --output json > /tmp/deployment_outputs.json
+
+  rm -f "${params_file}"
 
   log "Infrastructure deployment completed"
 }
 
-apply_cloud_init_configurations() {
-  log_section "Applying Cloud-Init Configurations"
-
-  if [[ -f "${WEB_SERVER_CONFIG}" ]]; then
-    log "Applying cloud-init configuration to web server"
-
-    az vm run-command invoke \
-      --resource-group "${RESOURCE_GROUP}" \
-      --name "${WEB_SERVER_NAME}" \
-      --command-id RunShellScript \
-      --scripts "$(cat "${WEB_SERVER_CONFIG}" | base64 -w0)"
-  fi
-
-  if [[ -f "${REVERSE_PROXY_CONFIG}" ]]; then
-    log "Applying cloud-init configuration to reverse proxy"
-
-    az vm run-command invoke \
-      --resource-group "${RESOURCE_GROUP}" \
-      --name "${REVERSE_PROXY_NAME}" \
-      --command-id RunShellScript \
-      --scripts "$(cat "${REVERSE_PROXY_CONFIG}" | base64 -w0)"
-  fi
-}
 
 get_vm_public_ip() {
   local vm_name="$1"
@@ -178,7 +225,6 @@ main() {
   create_resource_group
   validate_bicep_file
   deploy_infrastructure
-  apply_cloud_init_configurations
   display_vm_list
   display_connection_info
   test_reverse_proxy
