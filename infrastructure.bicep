@@ -23,7 +23,7 @@ param reverseProxyAsgName string = 'ReverseProxyASG'
 param bastionHostAsgName string = 'BastionHostASG'
 
 @description('VM size for all virtual machines')
-param vmSize string = 'Standard_B1ls'
+param vmSize string = 'Standard_B1s'
 
 @description('Admin username for VMs')
 param adminUsername string = 'azureuser'
