@@ -296,7 +296,7 @@ deploy_infrastructure() {
 
   local params_file
   params_file=$(mktemp)
-  trap 'rm -f "${params_file}"' RETURN
+  trap 'rm -f "${params_file:-}"' RETURN
 
   create_deployment_parameters "${ssh_key}" "${params_file}"
 
