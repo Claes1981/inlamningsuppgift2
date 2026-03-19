@@ -8,7 +8,7 @@ write_files:
   - path: /etc/nginx/sites-available/default
     content: |
       upstream webserver {
-          server 10.0.0.4:8080;
+          server webserver:8080;
       }
 
       server {
@@ -25,5 +25,6 @@ write_files:
       }
 
 runcmd:
+  - echo "$(dig +short webserver | head -1) webserver" >> /etc/hosts
   - systemctl restart nginx
   - systemctl enable nginx
