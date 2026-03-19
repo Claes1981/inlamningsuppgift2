@@ -30,7 +30,7 @@ readonly CLOUD_INIT_FILES=("${CLOUD_INIT_WEBSERVER}" "${CLOUD_INIT_REVERSEPROXY}
 
 readonly MAX_RETRY_ATTEMPTS=30
 readonly RETRY_DELAY_SECONDS=2
-readonly DEPLOYMENT_OUTPUTS_FILE="/tmp/deployment_outputs.json"
+readonly PROVISIONING_OUTPUTS_FILE="/tmp/provisioning_outputs.json"
 
 # =============================================================================
 # UTILITY FUNCTIONS
@@ -235,7 +235,7 @@ wait_for_resource() {
 }
 
 # =============================================================================
-# DEPLOYMENT FUNCTIONS
+# PROVISIONING FUNCTIONS
 # =============================================================================
 
 encode_cloud_init() {
@@ -243,7 +243,7 @@ encode_cloud_init() {
   base64 -w0 < "${cloud_init_file}"
 }
 
-create_deployment_parameters() {
+create_provisioning_parameters() {
   local ssh_key="$1"
   local output_file="$2"
 
@@ -281,8 +281,8 @@ create_deployment_parameters() {
 EOF
 }
 
-deploy_infrastructure() {
-  log_section "Deploying Infrastructure with Bicep"
+provision_infrastructure() {
+  log_section "Provisioning Infrastructure with Bicep"
 
   local ssh_key
   ssh_key=$(get_ssh_public_key)
@@ -298,18 +298,18 @@ deploy_infrastructure() {
   params_file=$(mktemp)
   trap 'rm -f "${params_file:-}"' RETURN
 
-  create_deployment_parameters "${ssh_key}" "${params_file}"
+  create_provisioning_parameters "${ssh_key}" "${params_file}"
 
-  log "Deploying Bicep template to resource group: ${RESOURCE_GROUP}"
+  log "Provisioning Bicep template to resource group: ${RESOURCE_GROUP}"
 
   az deployment group create \
     --resource-group "${RESOURCE_GROUP}" \
     --template-file "${SCRIPT_DIR}/${BICEP_FILE}" \
     --parameters "@${params_file}" \
     --query 'properties.outputs' \
-    --output json > "${DEPLOYMENT_OUTPUTS_FILE}"
+    --output json > "${PROVISIONING_OUTPUTS_FILE}"
 
-  log "Infrastructure deployment completed"
+  log "Infrastructure provisioning completed"
 }
 
 # =============================================================================
@@ -424,7 +424,7 @@ main() {
   validate_cloud_init_files
   ensure_ssh_key
   create_resource_group
-  deploy_infrastructure
+  provision_infrastructure
   display_vm_list
   display_connection_info
   display_ssh_commands
