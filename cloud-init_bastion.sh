@@ -1,7 +1,7 @@
 #cloud-config
-package_update: false
+package_update: true
 package_upgrade: false
 
-runcmd:
-  - systemctl restart ssh
-  - systemctl enable ssh
+#runcmd:
+#  - systemctl restart ssh
+#  - systemctl enable ssh

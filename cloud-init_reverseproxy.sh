@@ -1,5 +1,5 @@
 #cloud-config
-package_update: false
+package_update: true
 package_upgrade: false
 packages:
   - nginx
