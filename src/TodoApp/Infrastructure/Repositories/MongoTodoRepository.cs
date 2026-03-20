@@ -41,8 +41,7 @@ public class MongoTodoRepository : ITodoRepository
     /// </summary>
     public async Task<Todo?> GetByIdAsync(string id)
     {
-        var objectId = ValidateObjectId(id);
-        return await _todosCollection.Find(t => t.Id == objectId).FirstOrDefaultAsync();
+        return await _todosCollection.Find(t => t.Id == id).FirstOrDefaultAsync();
     }
 
     /// <summary>
@@ -59,9 +58,8 @@ public class MongoTodoRepository : ITodoRepository
     /// </summary>
     public async Task<Todo> UpdateAsync(Todo todo)
     {
-        var objectId = ValidateObjectId(todo.Id);
         var result = await _todosCollection.ReplaceOneAsync(
-            t => t.Id == objectId,
+            t => t.Id == todo.Id,
             todo
         );
 
@@ -78,21 +76,7 @@ public class MongoTodoRepository : ITodoRepository
     /// </summary>
     public async Task<bool> DeleteAsync(string id)
     {
-        var objectId = ValidateObjectId(id);
-        var result = await _todosCollection.DeleteOneAsync(t => t.Id == objectId);
+        var result = await _todosCollection.DeleteOneAsync(t => t.Id == id);
         return result.DeletedCount > 0;
-    }
-
-    /// <summary>
-    /// Validates and converts a string ID to ObjectId.
-    /// </summary>
-    private static ObjectId ValidateObjectId(string id)
-    {
-        if (!ObjectId.TryParse(id, out var objectId))
-        {
-            throw new ArgumentException($"Invalid ObjectId format: {id}");
-        }
-
-        return objectId;
     }
 }
