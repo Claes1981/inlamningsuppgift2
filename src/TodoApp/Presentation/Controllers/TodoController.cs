@@ -8,9 +8,7 @@ namespace TodoApp.Presentation.Controllers;
 /// MVC Controller for Todo CRUD operations.
 /// Follows Single Responsibility Principle - handles HTTP requests and responses only.
 /// </summary>
-[ApiController]
-[Route("api/[controller]")]
-public class TodoController : ControllerBase
+public class TodoController : Controller
 {
     private readonly ITodoService _todoService;
 
@@ -24,23 +22,18 @@ public class TodoController : ControllerBase
     }
 
     /// <summary>
-    /// GET: api/todo - Gets all todo items.
+    /// GET: /Todo - Displays the list of all todo items.
     /// </summary>
-    [HttpGet]
-    [ProducesResponseType(typeof(IEnumerable<TodoDto>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<IEnumerable<TodoDto>>> GetAll()
+    public async Task<IActionResult> Index()
     {
         var todos = await _todoService.GetAllAsync();
-        return Ok(todos);
+        return View(todos);
     }
 
     /// <summary>
-    /// GET: api/todo/{id} - Gets a todo item by ID.
+    /// GET: /Todo/Details/{id} - Displays details of a specific todo item.
     /// </summary>
-    [HttpGet("{id}")]
-    [ProducesResponseType(typeof(TodoDto), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<TodoDto>> GetById(string id)
+    public async Task<IActionResult> Details(string id)
     {
         var todo = await _todoService.GetByIdAsync(id);
         if (todo == null)
@@ -48,44 +41,86 @@ public class TodoController : ControllerBase
             return NotFound();
         }
 
-        return Ok(todo);
+        return View(todo);
     }
 
     /// <summary>
-    /// POST: api/todo - Creates a new todo item.
+    /// GET: /Todo/Create - Displays the create todo form.
+    /// </summary>
+    public IActionResult Create()
+    {
+        return View();
+    }
+
+    /// <summary>
+    /// POST: /Todo/Create - Creates a new todo item.
     /// </summary>
     [HttpPost]
-    [ProducesResponseType(typeof(TodoDto), StatusCodes.Status201Created)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult<TodoDto>> Create([FromBody] CreateTodoDto dto)
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(CreateTodoDto dto)
     {
         if (string.IsNullOrWhiteSpace(dto.Title))
         {
-            return BadRequest(new { error = "Title is required" });
+            ModelState.AddModelError("Title", "Title is required");
         }
 
-        var todo = await _todoService.CreateAsync(dto);
-        return CreatedAtAction(nameof(GetById), new { id = todo.Id }, todo);
+        if (!ModelState.IsValid)
+        {
+            return View(dto);
+        }
+
+        await _todoService.CreateAsync(dto);
+        return RedirectToAction(nameof(Index));
     }
 
     /// <summary>
-    /// PUT: api/todo/{id} - Updates an existing todo item.
+    /// GET: /Todo/Edit/{id} - Displays the edit todo form.
     /// </summary>
-    [HttpPut("{id}")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult> Update(string id, [FromBody] UpdateTodoDto dto)
+    public async Task<IActionResult> Edit(string id)
     {
+        var todo = await _todoService.GetByIdAsync(id);
+        if (todo == null)
+        {
+            return NotFound();
+        }
+
+        var dto = new UpdateTodoDto
+        {
+            Id = todo.Id,
+            Title = todo.Title,
+            Description = todo.Description,
+            IsCompleted = todo.IsCompleted
+        };
+
+        return View(dto);
+    }
+
+    /// <summary>
+    /// POST: /Todo/Edit/{id} - Updates an existing todo item.
+    /// </summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Edit(string id, UpdateTodoDto dto)
+    {
+        if (id != dto.Id)
+        {
+            return BadRequest();
+        }
+
         if (string.IsNullOrWhiteSpace(dto.Title))
         {
-            return BadRequest(new { error = "Title is required" });
+            ModelState.AddModelError("Title", "Title is required");
+        }
+
+        if (!ModelState.IsValid)
+        {
+            return View(dto);
         }
 
         try
         {
-            var todo = await _todoService.UpdateAsync(id, dto);
-            return Ok(todo);
+            await _todoService.UpdateAsync(id, dto);
+            return RedirectToAction(nameof(Index));
         }
         catch (KeyNotFoundException)
         {
@@ -94,19 +129,20 @@ public class TodoController : ControllerBase
     }
 
     /// <summary>
-    /// DELETE: api/todo/{id} - Deletes a todo item.
+    /// POST: /Todo/Delete/{id} - Deletes a todo item.
     /// </summary>
-    [HttpDelete("{id}")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult> Delete(string id)
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(string id)
     {
-        var deleted = await _todoService.DeleteAsync(id);
-        if (!deleted)
+        try
+        {
+            await _todoService.DeleteAsync(id);
+            return RedirectToAction(nameof(Index));
+        }
+        catch (KeyNotFoundException)
         {
             return NotFound();
         }
-
-        return Ok();
     }
 }
