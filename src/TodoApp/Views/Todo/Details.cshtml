@@ -1,0 +1,53 @@
+@model TodoApp.Application.DTOs.TodoDto
+
+@{
+    ViewData["Title"] = "Todo Details";
+}
+
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header bg-info text-white">
+                    <h4 class="mb-0"><i class="bi bi-eye"></i> Todo Details</h4>
+                </div>
+                <div class="card-body">
+                    <dl class="row">
+                        <dt class="col-sm-4">@Html.DisplayNameFor(m => m.Title)</dt>
+                        <dd class="col-sm-8">
+                            <h5>@(Model.IsCompleted ? "<s>" + Model.Title + "</s>" : Model.Title)</h5>
+                        </dd>
+
+                        <dt class="col-sm-4">@Html.DisplayNameFor(m => m.Description)</dt>
+                        <dd class="col-sm-8">@Html.DisplayFor(m => m.Description)</dd>
+
+                        <dt class="col-sm-4">@Html.DisplayNameFor(m => m.IsCompleted)</dt>
+                        <dd class="col-sm-8">
+                            <span class="badge @(Model.IsCompleted ? "bg-success" : "bg-warning")">
+                                @(Model.IsCompleted ? "Completed" : "Pending")
+                            </span>
+                        </dd>
+
+                        <dt class="col-sm-4">@Html.DisplayNameFor(m => m.CreatedAt)</dt>
+                        <dd class="col-sm-8">@Model.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss")</dd>
+
+                        @if (Model.UpdatedAt.HasValue)
+                        {
+                            <dt class="col-sm-4">@Html.DisplayNameFor(m => m.UpdatedAt)</dt>
+                            <dd class="col-sm-8">@Model.UpdatedAt.Value.ToString("yyyy-MM-dd HH:mm:ss")</dd>
+                        }
+                    </dl>
+
+                    <div class="d-flex justify-content-between mt-4">
+                        <a asp-action="Index" class="btn btn-secondary">
+                            <i class="bi bi-arrow-left"></i> Back to List
+                        </a>
+                        <a asp-action="Edit" asp-route-id="@Model.Id" class="btn btn-warning">
+                            <i class="bi bi-pencil"></i> Edit
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
