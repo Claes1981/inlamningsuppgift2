@@ -31,11 +31,8 @@
                         <dt class="col-sm-4">@Html.DisplayNameFor(m => m.CreatedAt)</dt>
                         <dd class="col-sm-8">@Model.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss")</dd>
 
-                        @if (Model.UpdatedAt.HasValue)
-                        {
-                            <dt class="col-sm-4">@Html.DisplayNameFor(m => m.UpdatedAt)</dt>
-                            <dd class="col-sm-8">@Model.UpdatedAt.Value.ToString("yyyy-MM-dd HH:mm:ss")</dd>
-                        }
+                        <dt class="col-sm-4">@Html.DisplayNameFor(m => m.UpdatedAt)</dt>
+                        <dd class="col-sm-8">@Model.UpdatedAt.ToString("yyyy-MM-dd HH:mm:ss")</dd>
                     </dl>
 
                     <div class="d-flex justify-content-between mt-4">
