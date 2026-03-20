@@ -129,11 +129,25 @@ public class TodoController : Controller
     }
 
     /// <summary>
+    /// GET: /Todo/Delete/{id} - Displays the delete confirmation page.
+    /// </summary>
+    public async Task<IActionResult> Delete(string id)
+    {
+        var todo = await _todoService.GetByIdAsync(id);
+        if (todo == null)
+        {
+            return NotFound();
+        }
+
+        return View(todo);
+    }
+
+    /// <summary>
     /// POST: /Todo/Delete/{id} - Deletes a todo item.
     /// </summary>
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Delete(string id)
+    public async Task<IActionResult> DeleteConfirmed(string id)
     {
         try
         {
