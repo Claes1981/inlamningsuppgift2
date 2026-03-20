@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Routing;
 using MongoDB.Driver;
 using TodoApp.Application.Services;
 using TodoApp.Domain.Repositories;
@@ -27,8 +28,8 @@ builder.Services.AddScoped<ITodoRepository>(sp =>
 // Register service (Application layer)
 builder.Services.AddScoped<ITodoService, TodoService>();
 
-// Add controllers
-builder.Services.AddControllers();
+// Add MVC with views
+builder.Services.AddControllersWithViews();
 
 // Add Swagger for API documentation
 builder.Services.AddEndpointsApiExplorer();
@@ -69,9 +70,15 @@ if (app.Environment.IsDevelopment())
 app.UseCors("AllowAll");
 
 app.UseHttpsRedirection();
+app.UseStaticFiles();
 app.UseAuthorization();
 
-// Map controllers
+// Configure default route to Todo controller
+app.MapControllerRoute(
+    name: "default",
+    pattern: "{controller=Todo}/{action=Index}/{id?}");
+
+// Map controllers for API endpoints
 app.MapControllers();
 
 app.Run();
