@@ -50,6 +50,18 @@ param reverseProxyCloudInit string
 @description('Cloud-init configuration for bastion host (base64 encoded)')
 param bastionHostCloudInit string = ''
 
+@description('Cosmos DB name')
+param cosmosDbName string = 'todoappcosmosdb'
+
+@description('Cosmos DB database name')
+param cosmosDatabaseName string = 'TodoAppDb'
+
+@description('Cosmos DB collection name')
+param cosmosCollectionName string = 'todos'
+
+@description('Cosmos DB throughput (RU/s)')
+param cosmosThroughput int = 400
+
 // Variables - DRY principle: define common configurations once
 var ubuntuImage = {
   publisher: 'Canonical'
@@ -159,6 +171,19 @@ var nsgSecurityRules = [
           id: reverseProxyAsg.id
         }
       ]
+    }
+  }
+  {
+    name: 'AllowCosmosDBAccess'
+    properties: {
+      priority: 2500
+      access: 'Allow'
+      protocol: 'Tcp'
+      direction: 'Outbound'
+      sourceAddressPrefix: vnetAddressPrefix
+      sourcePortRange: '*'
+      destinationAddressPrefix: '*'
+      destinationPortRange: '10255'
     }
   }
   {
@@ -381,9 +406,74 @@ resource bastionHostVm 'Microsoft.Compute/virtualMachines@2024-03-01' = {
   }
 }
 
+// =============================================================================
+// Azure Cosmos DB with MongoDB API
+// =============================================================================
+
+resource cosmosDbAccount 'Microsoft.DocumentDB/databaseAccounts@2024-03-01' = {
+  name: cosmosDbName
+  location: location
+  kind: 'GlobalDocumentDB'
+  properties: {
+    consistencyPolicy: {
+      defaultConsistencyLevel: 'Session'
+    }
+    databaseAccountOfferType: 'Standard'
+    enableAutomaticFailover: false
+    enableMultipleWriteLocations: false
+    locations: [
+      {
+        locationName: location
+        failoverPriority: 0
+      }
+    ]
+    apiProperties: {
+      apiKind: 'MongoDB'
+    }
+  }
+  tags: {
+    name: 'Cosmos DB for MongoDB'
+  }
+}
+
+resource cosmosMongoDatabase 'Microsoft.DocumentDB/databaseAccounts/mongodbDatabases@2024-03-01' = {
+  parent: cosmosDbAccount
+  name: cosmosDatabaseName
+  properties: {
+    resource: {}
+  }
+}
+
+resource cosmosCollection 'Microsoft.DocumentDB/databaseAccounts/mongodbDatabases/collections@2024-03-01' = {
+  parent: cosmosMongoDatabase
+  name: cosmosCollectionName
+  properties: {
+    resource: {
+      shardKey: {
+        path: '/_id'
+        kind: 'Hashed'
+      }
+    }
+  }
+}
+
+resource cosmosCollectionThroughput 'Microsoft.DocumentDB/databaseAccounts/mongodbDatabases/collections/throughputs@2024-03-01' = {
+  parent: cosmosCollection
+  name: 'throughput'
+  properties: {
+    resource: {
+      throughput: cosmosThroughput
+    }
+  }
+}
+
 // Outputs
 output reverseProxyPublicIp string = reverseProxyPublicIp.properties.ipAddress
 output bastionHostPublicIp string = bastionHostPublicIp.properties.ipAddress
 output webServerPrivateIp string = webServerNic.properties.ipConfigurations[0].properties.privateIPAddress
 output reverseProxyPrivateIp string = reverseProxyNic.properties.ipConfigurations[0].properties.privateIPAddress
 output bastionHostPrivateIp string = bastionHostNic.properties.ipConfigurations[0].properties.privateIPAddress
+output cosmosDbEndpoint string = cosmosDbAccount.properties.mongoServerEndpoint
+output cosmosDbName string = cosmosDbAccount.name
+output cosmosDatabaseName string = cosmosDatabaseName
+output cosmosCollectionName string = cosmosCollectionName

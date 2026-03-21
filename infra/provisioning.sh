@@ -413,6 +413,40 @@ test_reverse_proxy() {
 }
 
 # =============================================================================
+# COSMOS DB FUNCTIONS
+# =============================================================================
+
+display_cosmos_db_info() {
+  log_section "Azure Cosmos DB Information"
+
+  if [[ -f "${PROVISIONING_OUTPUTS_FILE}" ]]; then
+    local cosmos_endpoint
+    local cosmos_db_name
+    local cosmos_collection_name
+
+    cosmos_endpoint=$(jq -r '.cosmosDbEndpoint // empty' "${PROVISIONING_OUTPUTS_FILE}")
+    cosmos_db_name=$(jq -r '.cosmosDatabaseName // empty' "${PROVISIONING_OUTPUTS_FILE}")
+    cosmos_collection_name=$(jq -r '.cosmosCollectionName // empty' "${PROVISIONING_OUTPUTS_FILE}")
+
+    if [[ -n "${cosmos_endpoint}" ]]; then
+      echo "Cosmos DB Endpoint: ${cosmos_endpoint}"
+      echo "Database Name: ${cosmos_db_name}"
+      echo "Collection Name: ${cosmos_collection_name}"
+      echo ""
+      echo "Connection String Format:"
+      echo "mongodb+srv://${cosmos_endpoint}?ssl=true"
+      echo ""
+      log "Note: You need to get the Cosmos DB password from Azure Portal:"
+      log "az cosmosdb list-keys --name <cosmos-db-name> --resource-group ${RESOURCE_GROUP}"
+    else
+      log_warning "Cosmos DB information not available yet"
+    fi
+  else
+    log_warning "Provisioning outputs file not found"
+  fi
+}
+
+# =============================================================================
 # MAIN EXECUTION
 # =============================================================================
 
@@ -428,6 +462,7 @@ main() {
   display_vm_list
   display_connection_info
   display_ssh_commands
+  display_cosmos_db_info
   test_reverse_proxy || true
 
   log_section "Provisioning Complete"
