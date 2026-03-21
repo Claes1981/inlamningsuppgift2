@@ -6,42 +6,42 @@ namespace TodoApp.Application.Services;
 
 /// <summary>
 /// Service interface for Todo business operations.
-/// Follows Dependency Inversion Principle.
+/// Follows Interface Segregation Principle - focused on Todo operations only.
 /// </summary>
 public interface ITodoService
 {
     /// <summary>
     /// Gets all todo items.
     /// </summary>
-    /// <returns>List of all todo DTOs.</returns>
-    Task<IEnumerable<TodoDto>> GetAllAsync();
+    /// <returns>Collection of all todo items.</returns>
+    Task<IEnumerable<TodoDto>> GetTodosAsync();
 
     /// <summary>
     /// Gets a todo item by its ID.
     /// </summary>
-    /// <param name="id">The todo ID.</param>
-    /// <returns>The todo DTO or null if not found.</returns>
-    Task<TodoDto?> GetByIdAsync(string id);
+    /// <param name="id">The unique identifier of the todo item.</param>
+    /// <returns>The todo item or null if not found.</returns>
+    Task<TodoDto?> GetTodoByIdAsync(string id);
 
     /// <summary>
     /// Creates a new todo item.
     /// </summary>
-    /// <param name="dto">The create todo DTO.</param>
-    /// <returns>The created todo DTO.</returns>
-    Task<TodoDto> CreateAsync(CreateTodoDto dto);
+    /// <param name="dto">The data transfer object containing todo data.</param>
+    /// <returns>The created todo item.</returns>
+    Task<TodoDto> CreateTodoAsync(CreateTodoDto dto);
 
     /// <summary>
     /// Updates an existing todo item.
     /// </summary>
-    /// <param name="id">The todo ID.</param>
-    /// <param name="dto">The update todo DTO.</param>
-    /// <returns>The updated todo DTO.</returns>
-    Task<TodoDto> UpdateAsync(string id, UpdateTodoDto dto);
+    /// <param name="id">The unique identifier of the todo item.</param>
+    /// <param name="dto">The data transfer object containing updated todo data.</param>
+    /// <returns>The updated todo item.</returns>
+    Task<TodoDto> UpdateTodoAsync(string id, UpdateTodoDto dto);
 
     /// <summary>
     /// Deletes a todo item.
     /// </summary>
-    /// <param name="id">The todo ID to delete.</param>
-    /// <returns>True if deleted, false if not found.</returns>
-    Task<bool> DeleteAsync(string id);
+    /// <param name="id">The unique identifier of the todo item.</param>
+    /// <returns>True if the todo was deleted, false otherwise.</returns>
+    Task<bool> DeleteTodoAsync(string id);
 }

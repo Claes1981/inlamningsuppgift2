@@ -27,7 +27,7 @@ public class TodoService : ITodoService
     /// <summary>
     /// Gets all todo items.
     /// </summary>
-    public async Task<IEnumerable<TodoDto>> GetAllAsync()
+    public async Task<IEnumerable<TodoDto>> GetTodosAsync()
     {
         var todos = await _todoRepository.GetAllAsync();
         return todos.Select(MapToDto);
@@ -36,7 +36,7 @@ public class TodoService : ITodoService
     /// <summary>
     /// Gets a todo item by its ID.
     /// </summary>
-    public async Task<TodoDto?> GetByIdAsync(string id)
+    public async Task<TodoDto?> GetTodoByIdAsync(string id)
     {
         var todo = await _todoRepository.GetByIdAsync(id);
         return todo != null ? MapToDto(todo) : null;
@@ -45,7 +45,7 @@ public class TodoService : ITodoService
     /// <summary>
     /// Creates a new todo item.
     /// </summary>
-    public async Task<TodoDto> CreateAsync(CreateTodoDto dto)
+    public async Task<TodoDto> CreateTodoAsync(CreateTodoDto dto)
     {
         var todo = new Todo
         {
@@ -61,7 +61,7 @@ public class TodoService : ITodoService
     /// <summary>
     /// Updates an existing todo item.
     /// </summary>
-    public async Task<TodoDto> UpdateAsync(string id, UpdateTodoDto dto)
+    public async Task<TodoDto> UpdateTodoAsync(string id, UpdateTodoDto dto)
     {
         var todo = await _todoRepository.GetByIdAsync(id);
         if (todo == null)
@@ -87,7 +87,7 @@ public class TodoService : ITodoService
     /// <summary>
     /// Deletes a todo item.
     /// </summary>
-    public async Task<bool> DeleteAsync(string id)
+    public async Task<bool> DeleteTodoAsync(string id)
     {
         return await _todoRepository.DeleteAsync(id);
     }
@@ -103,8 +103,7 @@ public class TodoService : ITodoService
             Title = todo.Title,
             Description = todo.Description,
             IsCompleted = todo.IsCompleted,
-            CreatedAt = todo.CreatedAt,
-            UpdatedAt = todo.UpdatedAt
+            CreatedAt = todo.CreatedAt
         };
     }
 }
