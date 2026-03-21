@@ -81,4 +81,7 @@ app.MapControllerRoute(
 // Map controllers for API endpoints
 app.MapControllers();
 
+// Configure Kestrel to listen on port 5000 (for reverse proxy)
+app.Urls.Add("http://*:5000");
+
 app.Run();
