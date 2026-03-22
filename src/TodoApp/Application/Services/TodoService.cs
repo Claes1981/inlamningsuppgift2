@@ -30,7 +30,7 @@ public class TodoService : ITodoService
     public async Task<IEnumerable<TodoDto>> GetTodosAsync()
     {
         var todos = await _todoRepository.GetAllAsync();
-        return todos.Select(MapToDto);
+        return todos?.Select(MapToDto) ?? Enumerable.Empty<TodoDto>();
     }
 
     /// <summary>

@@ -30,7 +30,7 @@ public class TodoController : ControllerBase
     public async Task<ActionResult<IEnumerable<TodoDto>>> Index()
     {
         var todos = await _todoService.GetTodosAsync();
-        return Ok(todos);
+        return Ok(todos ?? Enumerable.Empty<TodoDto>());
     }
 
     /// <summary>
