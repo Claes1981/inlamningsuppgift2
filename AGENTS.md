@@ -179,7 +179,7 @@ inlamningsuppgift2/
 
 #### Structure
 - Use `#cloud-config` header on first line
-- Set `package_update: false` and `package_upgrade: false` to avoid timeouts
+- Set `package_update: true` and `package_upgrade: false`
 - Use 2-space indentation for YAML
 - Group packages, write_files, runcmd logically
 - Base64 encode in provisioning script before passing to Bicep
