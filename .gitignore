@@ -67,3 +67,6 @@ Thumbs.db
 *.bak
 *.swp
 *~
+
+tests/Infrastructure.Tests/TestResults
+tests/TodoApp.Tests/TestResults
