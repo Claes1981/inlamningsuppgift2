@@ -34,9 +34,11 @@ public class TodoControllerTests
         var result = await _controller.Index();
 
         // Assert
-        var actionResult = result.Should().BeOfType<ActionResult<IEnumerable<TodoDto>>>()
-            .Subject;
-        actionResult.Value.Should().BeEquivalentTo(todos);
+        result.Should().BeOfType<ActionResult<IEnumerable<TodoDto>>>();
+        var actionResult = (ActionResult<IEnumerable<TodoDto>>)result;
+        actionResult.Result.Should().BeOfType<OkObjectResult>();
+        var okResult = (OkObjectResult)actionResult.Result!;
+        okResult.Value.Should().BeEquivalentTo(todos);
     }
 
     [Fact]
@@ -49,9 +51,11 @@ public class TodoControllerTests
         var result = await _controller.Index();
 
         // Assert
-        var actionResult = result.Should().BeOfType<ActionResult<IEnumerable<TodoDto>>>()
-            .Subject;
-        actionResult.Value.Should().BeEmpty();
+        result.Should().BeOfType<ActionResult<IEnumerable<TodoDto>>>();
+        var actionResult = (ActionResult<IEnumerable<TodoDto>>)result;
+        actionResult.Result.Should().BeOfType<OkObjectResult>();
+        var okResult = (OkObjectResult)actionResult.Result!;
+        ((IEnumerable<TodoDto>)okResult.Value!).Should().BeEmpty();
     }
 
     [Fact]

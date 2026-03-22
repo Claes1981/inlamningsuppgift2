@@ -72,7 +72,7 @@ public class TodoServiceTests
 
         // Assert
         result.Should().NotBeNull();
-        result.Id.Should().Be("1");
+        result!.Id.Should().Be("1");
         result.Title.Should().Be("Task 1");
     }
 
