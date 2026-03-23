@@ -7,7 +7,7 @@ set -euo pipefail
 # =============================================================================
 
 readonly SCRIPT_NAME="Azure Infrastructure Provisioning"
-readonly RESOURCE_GROUP="DemoRG"
+readonly RESOURCE_GROUP="TodoAppResourceGroup"
 readonly LOCATION="denmarkeast"
 readonly BICEP_FILE="infrastructure.bicep"
 
