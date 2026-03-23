@@ -33,9 +33,9 @@ This project provisions Azure infrastructure using Bicep templates and Bash scri
 inlamningsuppgift2/
 ├── infra/                          # Infrastructure as Code
 │   ├── infrastructure.bicep        # Azure resources (VMs, VNET, NSG, Cosmos DB)
-│   ├── provisioning.sh             # Main deployment script
+│   ├── provisioning.sh             # Main provisioning script
 │   ├── deploy_app.sh               # .NET app deployment script
-│   ├── cloud-init_webserver.sh     # Web server config (NGINX, port 8080)
+│   ├── cloud-init_webserver.sh     # Web server config (NGINX, port 5000)
 │   ├── cloud-init_reverseproxy.sh  # Reverse proxy config (NGINX, port 80)
 │   └── cloud-init_bastion.sh       # Bastion host config (SSH)
 ├── src/
@@ -255,7 +255,7 @@ All VMs (for administrative access)
 
 ### Infrastructure
 - `infrastructure.bicep` - Bicep template for all Azure resources
-- `provisioning.sh` - Main deployment script with SSH key handling
+- `provisioning.sh` - Main provisioning script with SSH key handling
 - `deploy_app.sh` - .NET application deployment script
 - `cloud-init_webserver.sh` - Cloud-init for web server (nginx on 8080)
 - `cloud-init_reverseproxy.sh` - Cloud-init for reverse proxy (nginx on 80)
