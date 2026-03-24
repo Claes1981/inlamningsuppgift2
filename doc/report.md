@@ -22,7 +22,7 @@
 
 ## Introduction
 
-The purpose of this assignment is to build a functional production environment for a web application using Azure cloud services. The application is a .NET 10.0 Todo application following Clean Architecture principles, deployed on virtual servers with proper security measures to protect against external threats.
+The purpose of this assignment is to build a functional production environment for a web application using Azure cloud services. The application is a .NET 10.0 Todo application following Clean Architecture principles, deployed on a virtual server with proper security measures to protect against external threats.
 
 This report describes the infrastructure design, security implementation, and step-by-step provisioning process using Infrastructure as Code (IaC) with Bicep templates and Bash automation scripts.
 
@@ -39,14 +39,14 @@ The infrastructure consists of three Ubuntu 24.04 LTS virtual machines arranged 
 │  Internet   │
 └──────┬──────┘
        │
-    ┌──┴────────────────────┐
+    ┌──┴─────────────────────┐
     │                        │
-┌───▼─────────┐      ┌──────▼──────────┐
-│ Reverse     │      │  Bastion Host   │
+┌───▼──────────┐      ┌──────▼──────────┐
+│ Reverse      │      │  Bastion Host   │
 │ Proxy (NGINX)│      │  (SSH Access)   │
-│ Public IP   │      │  Public IP      │
-│ Port 80     │      │  Port 22        │
-└──────┬──────┘      └─────────────────┘
+│ Public IP    │      │  Public IP      │
+│ Port 80      │      │  Port 22        │
+└──────┬───────┘      └─────────────────┘
        │
        │ HTTP:5000
        │
@@ -149,7 +149,7 @@ The NSG implements the principle of least privilege with the following rules:
 | **Bicep** | Infrastructure as Code for Azure resources |
 | **Bash 4.0+** | Automation scripts for provisioning |
 | **Cloud-init** | VM configuration during first boot |
-| **NGINX** | Reverse proxy and web server |
+| **NGINX** | Reverse proxy |
 
 ### Step-by-Step Provisioning
 
@@ -187,11 +187,11 @@ chmod +x infra/provisioning.sh
 The script performs the following operations:
 
 1. **Creates Resource Group** in `denmarkeast` region
-2. **Deploys Bicep Template** which provisions:
+2. **Provisions Bicep Template** which provisions:
    - Virtual Network (10.0.0.0/16) with subnet (10.0.0.0/24)
    - Network Security Group with ASG-based rules
    - Three Application Security Groups (ReverseProxy, WebServer, BastionHost)
-   - Three Public IP addresses (Reverse Proxy, Bastion Host, and backup)
+   - Two Public IP addresses (Reverse Proxy and Bastion Host)
    - Three Virtual Machines with cloud-init configurations
    - Cosmos DB account with MongoDB API
    - MongoDB database (`TodoAppDb`) and collection (`todos`)
