@@ -97,7 +97,7 @@ inlamningsuppgift2/
 | Test reverse proxy | `curl http://<REVERSE_PROXY_IP>` |
 | SSH to bastion | `ssh azureuser@<BASTION_IP>` |
 | SSH to internal VMs | `ssh -o ProxyJump="azureuser@<BASTION_IP>" azureuser@10.0.0.4` |
-| Get Cosmos DB keys | `az cosmosdb list-keys --name <cosmos-db-name> --resource-group DemoRG` |
+| Get Cosmos DB keys | `az cosmosdb list-keys --name <cosmos-db-name> --resource-group TodoAppResourceGroup` |
 
 ## Code Style Guidelines
 
@@ -246,7 +246,7 @@ All VMs (for administrative access)
 
 ### Debugging
 1. Check Azure CLI auth: `az account show`
-2. Verify resource group: `az group show --name DemoRG`
+2. Verify resource group: `az group show --name TodoAppResourceGroup`
 3. Check resource state: `az resource show --resource-type ...`
 4. Enable verbose logging: add `--debug` to az commands
 5. Check deployment outputs: `cat /tmp/provisioning_outputs.json`
