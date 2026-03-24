@@ -11,44 +11,43 @@ packages:
   - software-properties-common
 
 write_files:
-  - path: /etc/systemd/system/todoapp.service
-    permissions: '0644'
-    owner: root:root
+  - path: /etc/systemd/system/GithubActionsTodoApp.service
     content: |
       [Unit]
-      Description=TodoApp Web Application
-      After=network.target
-      Wants=network-online.target
+      Description=ASP.NET Web App running on Ubuntu
 
       [Service]
-      Type=simple
-      User=azureuser
-      Group=azureuser
-      WorkingDirectory=/home/azureuser/TodoApp/publish
-      ExecStart=/usr/bin/dotnet /home/azureuser/TodoApp/publish/TodoApp.dll
+      WorkingDirectory=/opt/GithubActionsTodoApp
+      ExecStart=/usr/bin/dotnet /opt/GithubActionsTodoApp/GithubActionsTodoApp.dll
       Restart=always
       RestartSec=10
-      StandardOutput=journal
-      StandardError=journal
-      SyslogIdentifier=todoapp
-      Environment="ASPNETCORE_ENVIRONMENT=Production"
-      Environment="DOTNET_ROLL_FORWARD=LatestMajor"
-      Environment="ASPNETCORE_URLS=http://+:5000"
+      KillSignal=SIGINT
+      SyslogIdentifier=GithubActionsTodoApp
+      User=www-data
+      Environment=ASPNETCORE_ENVIRONMENT=Production
+      Environment=DOTNET_PRINT_TELEMETRY_MESSAGE=false
+      Environment="ASPNETCORE_URLS=http://*:5000"
 
       [Install]
-      WantedBy=multi-user.target
+      WantedBy=multi-user.target      
+    owner: root:root
+    permissions: '0644'
 
 runcmd:
-  # Create directory for the application with proper permissions
-  - mkdir -p /home/azureuser/TodoApp/publish
-  - chown -R azureuser:azureuser /home/azureuser/TodoApp
+  # Register Microsoft repository (which includes .Net Runtime 10.0 package)
+  - wget -q https://packages.microsoft.com/config/ubuntu/24.04/packages-microsoft-prod.deb -O packages-microsoft-prod.deb
+  - dpkg -i packages-microsoft-prod.deb
 
-  # Reload systemd and enable the service
+  # Install .Net Runtime 10.0
+  - apt-get update
+  - apt-get install -y aspnetcore-runtime-10.0
+
+  # Enable the application service
   - systemctl daemon-reload
-  - systemctl enable todoapp.service
+  - systemctl enable GithubActionsTodoApp.service
 
   # Configure firewall to allow port 5000 (internal only)
   - ufw allow 5000/tcp || true
 
   # Set resource limits for the service
-  - systemctl set-property todoapp.service MemoryMax=512M || true
+  - systemctl set-property GithubActionsTodoApp.service MemoryMax=512M || true
