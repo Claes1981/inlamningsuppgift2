@@ -1,7 +1,7 @@
-# Cloud Developer Course - Assignment 2 Report
+# "Inlämningsuppgift 2" Report
 
 **Author:** Claes Fransson  
-**Date:** March 2026  
+**Date:** March 24, 2026  
 **Repository:** https://github.com/Claes1981/inlamningsuppgift2
 
 ---
@@ -34,59 +34,36 @@ This report describes the infrastructure design, security implementation, and st
 
 The infrastructure consists of three Ubuntu 24.04 LTS virtual machines arranged in a secure topology:
 
-```
-┌─────────────┐
-│  Internet   │
-└──────┬──────┘
-       │
-    ┌──┴─────────────────────┐
-    │                        │
-┌───▼──────────┐      ┌──────▼──────────┐
-│ Reverse      │      │  Bastion Host   │
-│ Proxy (NGINX)│      │  (SSH Access)   │
-│ Public IP    │      │  Public IP      │
-│ Port 80      │      │  Port 22        │
-└──────┬───────┘      └─────────────────┘
-       │
-       │ HTTP:5000
-       │
-┌──────▼──────────┐
-│  Web Server     │
-│  (Private Only) │
-│  .NET TodoApp   │
-│  Port 5000      │
-└──────┬──────────┘
-       │
-       │ MongoDB Protocol
-       │
-┌──────▼──────────┐
-│ Azure Cosmos DB │
-│  (MongoDB API)  │
-└─────────────────┘
-```
+![Infrastructure Architecture](infrastructure-architecture.png)
+
+### To-Do App Architecture
+
+The .NET Todo application follows Clean Architecture principles with four distinct layers:
+
+![To-Do App Clean Architecture](todoapp-architecture.png)
 
 ### Component Descriptions
 
-| Component | Purpose | IP Configuration |
-|-----------|---------|------------------|
-| **Reverse Proxy** | Terminates public HTTP traffic, forwards requests to web server | Public IP + Private IP (10.0.0.4) |
-| **Web Server** | Hosts the .NET Todo application | Private IP only (10.0.0.6) |
-| **Bastion Host** | Secure SSH access to internal VMs | Public IP + Private IP (10.0.0.5) |
-| **Cosmos DB** | MongoDB-compatible NoSQL database | Azure PaaS service |
-| **Virtual Network** | Isolated network (10.0.0.0/16) with single subnet | 10.0.0.0/24 |
-| **Network Security Group** | Traffic filtering with Application Security Groups | Subnet-level association |
+| Component                  | Purpose                                                         | IP Configuration                  |
+| -------------------------- | --------------------------------------------------------------- | --------------------------------- |
+| **Reverse Proxy**          | Terminates public HTTP traffic, forwards requests to web server | Public IP + Private IP (10.0.0.4) |
+| **Web Server**             | Hosts the .NET Todo application                                 | Private IP only (10.0.0.6)        |
+| **Bastion Host**           | Secure SSH access to internal VMs                               | Public IP + Private IP (10.0.0.5) |
+| **Cosmos DB**              | MongoDB-compatible NoSQL database                               | Azure PaaS service                |
+| **Virtual Network**        | Isolated network (10.0.0.0/16) with single subnet               | 10.0.0.0/24                       |
+| **Network Security Group** | Traffic filtering with Application Security Groups              | Subnet-level association          |
 
 ### Network Security Groups
 
 The NSG implements the principle of least privilege with the following rules:
 
-| Priority | Direction | Source | Destination | Port | Protocol | Purpose |
-|----------|-----------|--------|-------------|------|----------|---------|
-| 100 | Inbound | Internet | ReverseProxy ASG | 80 | TCP | Public HTTP access |
-| 200 | Inbound | Internet | BastionHost ASG | 22 | TCP | SSH admin access |
-| 300 | Inbound | ReverseProxy ASG | WebServer ASG | 5000 | TCP | Internal app traffic |
-| 400 | Inbound | WebServer ASG | Cosmos DB | 10255 | TCP | MongoDB protocol |
-| 500 | Inbound | BastionHost ASG | All VMs ASG | 22 | TCP | Internal SSH via bastion |
+| Priority | Direction | Source           | Destination      | Port  | Protocol | Purpose                  |
+| -------- | --------- | ---------------- | ---------------- | ----- | -------- | ------------------------ |
+| 100      | Inbound   | Internet         | ReverseProxy ASG | 80    | TCP      | Public HTTP access       |
+| 200      | Inbound   | Internet         | BastionHost ASG  | 22    | TCP      | SSH admin access         |
+| 300      | Inbound   | ReverseProxy ASG | WebServer ASG    | 5000  | TCP      | Internal app traffic     |
+| 400      | Inbound   | WebServer ASG    | Cosmos DB        | 10255 | TCP      | MongoDB protocol         |
+| 500      | Inbound   | BastionHost ASG  | All VMs ASG      | 22    | TCP      | Internal SSH via bastion |
 
 ---
 
@@ -127,15 +104,15 @@ The NSG implements the principle of least privilege with the following rules:
 
 ## Azure Services Used
 
-| Service | Purpose | Configuration |
-|---------|---------|---------------|
-| **Virtual Machines** | Application hosting | Ubuntu 24.04 LTS, Standard_DS1_v2 |
-| **Virtual Network** | Network isolation | 10.0.0.0/16 |
-| **Network Security Group** | Traffic filtering | Subnet-level with ASGs |
-| **Public IP Addresses** | External access | Standard SKU, Static |
-| **Application Security Groups** | Traffic segmentation | ReverseProxy, WebServer, BastionHost, AllVMs |
-| **Cosmos DB** | Data persistence | MongoDB API, Serverless tier, 4.2 server version |
-| **Managed Disks** | VM storage | Standard SSD |
+| Service                         | Purpose              | Configuration                                    |
+| ------------------------------- | -------------------- | ------------------------------------------------ |
+| **Virtual Machines**            | Application hosting  | Ubuntu 24.04 LTS, Standard_DS1_v2                |
+| **Virtual Network**             | Network isolation    | 10.0.0.0/16                                      |
+| **Network Security Group**      | Traffic filtering    | Subnet-level with ASGs                           |
+| **Public IP Addresses**         | External access      | Standard SKU, Static                             |
+| **Application Security Groups** | Traffic segmentation | ReverseProxy, WebServer, BastionHost, AllVMs     |
+| **Cosmos DB**                   | Data persistence     | MongoDB API, Serverless tier, 4.2 server version |
+| **Managed Disks**               | VM storage           | Standard SSD                                     |
 
 ---
 
@@ -143,13 +120,13 @@ The NSG implements the principle of least privilege with the following rules:
 
 ### Tools and Technologies
 
-| Tool | Purpose |
-|------|---------|
-| **Azure CLI (az)** | Authentication and resource management |
-| **Bicep** | Infrastructure as Code for Azure resources |
-| **Bash 4.0+** | Automation scripts for provisioning |
-| **Cloud-init** | VM configuration during first boot |
-| **NGINX** | Reverse proxy |
+| Tool               | Purpose                                    |
+| ------------------ | ------------------------------------------ |
+| **Azure CLI (az)** | Authentication and resource management     |
+| **Bicep**          | Infrastructure as Code for Azure resources |
+| **Bash 4.0+**      | Automation scripts for provisioning        |
+| **Cloud-init**     | VM configuration during first boot         |
+| **NGINX**          | Reverse proxy                              |
 
 ### Step-by-Step Provisioning
 
@@ -229,74 +206,133 @@ curl http://<reverse_proxy_public_ip>/health
 
 ## Application Deployment
 
-### Deployment Process
+### CI/CD Pipeline with GitHub Actions
 
-The .NET Todo application is deployed using the `deploy_app.sh` script:
+The application deployment is automated using GitHub Actions. The workflow is triggered on every push to the `main` branch or manually via workflow dispatch.
 
-```bash
-chmod +x infra/deploy_app.sh
-./infra/deploy_app.sh
+#### Workflow Overview
+
+The GitHub Actions workflow (`.github/workflows/dotnet-desktop.yml`) consists of two jobs:
+
+1. **Build Job** (runs on GitHub-hosted Ubuntu runner):
+   
+   - Installs .NET 10.0 SDK
+   - Restores NuGet dependencies
+   - Builds and publishes the application
+   - Uploads artifacts to GitHub
+
+2. **Deploy Job** (runs on self-hosted runner on Bastion Host):
+   
+   - Downloads artifacts from build job
+   - Stops the application service
+   - Deploys new version to `/opt/GithubActionsTodoApp`
+   - Starts the application service
+
+#### Web Server Configuration
+
+The web server is configured via cloud-init (`infra/cloud-init_webserver.sh`) to:
+
+1. Install .NET 10.0 Runtime
+2. Create systemd service `GithubActionsTodoApp.service`
+3. Enable service to start on boot
+4. Configure firewall to allow port 5000
+
+The systemd service configuration:
+
+```ini
+[Unit]
+Description=ASP.NET Web App running on Ubuntu
+
+[Service]
+WorkingDirectory=/opt/GithubActionsTodoApp
+ExecStart=/usr/bin/dotnet /opt/GithubActionsTodoApp/GithubActionsTodoApp.dll
+Restart=always
+RestartSec=10
+KillSignal=SIGINT
+SyslogIdentifier=GithubActionsTodoApp
+User=www-data
+Environment=ASPNETCORE_ENVIRONMENT=Production
+Environment=DOTNET_PRINT_TELEMETRY_MESSAGE=false
+Environment="ASPNETCORE_URLS=http://*:5000"
+
+[Install]
+WantedBy=multi-user.target
 ```
 
-### Deployment Steps
+#### Manual Deployment Alternative
 
-1. **Build and Publish Application**
+For manual deployment without GitHub Actions:
+
+1. **Build and Publish Locally**
+   
    ```bash
    dotnet publish -c Release -o ./publish
    ```
 
-2. **Retrieve Cosmos DB Credentials**
+2. **Create Production Configuration**
+   
    ```bash
    PRIMARY_KEY=$(az cosmosdb list-keys --name claestodoappdbaccount --resource-group TodoAppResourceGroup --query primaryMasterKey -o tsv)
-   ```
-
-3. **Create Production Configuration**
-   The script generates `appsettings.Production.json` with the connection string:
-   ```json
+   
+   cat > ./publish/appsettings.Production.json << EOF
    {
      "MongoSettings": {
-       "ConnectionString": "mongodb+srv://claestodoappdbaccount.mongo.cosmos.azure.com:10255/?ssl=true&replicaSet=globaldb&authSource=admin&authMechanism=SCRAM-SHA-256&password=<PRIMARY_KEY>",
+       "ConnectionString": "mongodb+srv://claestodoappdbaccount.mongo.cosmos.azure.com:10255/?ssl=true&replicaSet=globaldb&authSource=admin&authMechanism=SCRAM-SHA-256&password=${PRIMARY_KEY}",
        "DatabaseName": "TodoAppDb",
        "CollectionName": "todos"
      }
    }
+   EOF
    ```
 
-4. **Transfer Application to Web Server**
+3. **Transfer to Web Server via Bastion**
+   
    ```bash
-   scp -o ProxyJump="azureuser@<bastion_ip>" ./publish/* azureuser@10.0.0.6:/opt/todoapp/
-   ```
-
-5. **Restart Application Service**
-   ```bash
-   ssh -o ProxyJump="azureuser@<bastion_ip>" azureuser@10.0.0.6 "sudo systemctl restart todoapp"
+   ssh -o ProxyJump="azureuser@<bastion_ip>" azureuser@10.0.0.6 << 'EOF'
+   sudo systemctl stop GithubActionsTodoApp.service
+   sudo rm -Rf /opt/GithubActionsTodoApp
+   EOF
+   
+   scp -o ProxyJump="azureuser@<bastion_ip>" ./publish/* azureuser@10.0.0.6:/tmp/todoapp/
+   
+   ssh -o ProxyJump="azureuser@<bastion_ip>" azureuser@10.0.0.6 << 'EOF'
+   sudo mv /tmp/todoapp /opt/GithubActionsTodoApp
+   sudo chown -R www-data:www-data /opt/GithubActionsTodoApp
+   sudo systemctl start GithubActionsTodoApp.service
+   EOF
    ```
 
 ### Verification
 
 ```bash
 # Check service status
-ssh -o ProxyJump="azureuser@<bastion_ip>" azureuser@10.0.0.6 "sudo systemctl status todoapp"
+ssh -o ProxyJump="azureuser@<bastion_ip>" azureuser@10.0.0.6 "sudo systemctl status GithubActionsTodoApp"
+
+# View application logs
+ssh -o ProxyJump="azureuser@<bastion_ip>" azureuser@10.0.0.6 "sudo journalctl -u GithubActionsTodoApp -f"
 
 # Test API endpoint through reverse proxy
-curl http://<reverse_proxy_public_ip>/api/todos
+curl http://<reverse_proxy_public_ip>/api/todo
 
 # Test Swagger UI
 curl http://<reverse_proxy_public_ip>/swagger
+
+# Test health endpoint
+curl http://<reverse_proxy_public_ip>/health
 ```
 
 ---
 
 ## Verification Steps
 
-| Step | Command | Expected Result |
-|------|---------|-----------------|
-| 1. Resource Group | `az group show --name TodoAppResourceGroup` | Returns resource group details |
-| 2. VMs Running | `az vm list --resource-group TodoAppResourceGroup --query "[].{name:name,powerState:powerState}"` | All 3 VMs in `VM running` state |
-| 3. Bastion SSH | `ssh azureuser@<bastion_ip> "whoami"` | Returns `azureuser` |
-| 4. Reverse Proxy | `curl http://<reverse_proxy_ip>/health` | Returns `OK` |
-| 5. Cosmos DB | `az cosmosdb show --name claestodoappdbaccount --resource-group TodoAppResourceGroup` | Returns account details |
-| 6. NSG Rules | `az network nsg rule list --resource-group TodoAppResourceGroup --nsg-name TodoAppNsg` | Shows 5+ inbound rules |
+| Step              | Command                                                                                           | Expected Result                 |
+| ----------------- | ------------------------------------------------------------------------------------------------- | ------------------------------- |
+| 1. Resource Group | `az group show --name TodoAppResourceGroup`                                                       | Returns resource group details  |
+| 2. VMs Running    | `az vm list --resource-group TodoAppResourceGroup --query "[].{name:name,powerState:powerState}"` | All 3 VMs in `VM running` state |
+| 3. Bastion SSH    | `ssh azureuser@<bastion_ip> "whoami"`                                                             | Returns `azureuser`             |
+| 4. Reverse Proxy  | `curl http://<reverse_proxy_ip>/health`                                                           | Returns `OK`                    |
+| 5. Cosmos DB      | `az cosmosdb show --name claestodoappdbaccount --resource-group TodoAppResourceGroup`             | Returns account details         |
+| 6. NSG Rules      | `az network nsg rule list --resource-group TodoAppResourceGroup --nsg-name TodoAppNsg`            | Shows 5+ inbound rules          |
 
 ---
 
@@ -304,34 +340,32 @@ curl http://<reverse_proxy_public_ip>/swagger
 
 ### ✅ Completed
 
-| Component | Status | Notes |
-|-----------|--------|-------|
-| **Resource Group** | ✅ Complete | `TodoAppResourceGroup` in `denmarkeast` |
-| **Virtual Network** | ✅ Complete | 10.0.0.0/16 with subnet 10.0.0.0/24 |
-| **Network Security Group** | ✅ Complete | ASG-based rules implemented |
+| Component                       | Status     | Notes                                        |
+| ------------------------------- | ---------- | -------------------------------------------- |
+| **Resource Group**              | ✅ Complete | `TodoAppResourceGroup` in `denmarkeast`      |
+| **Virtual Network**             | ✅ Complete | 10.0.0.0/16 with subnet 10.0.0.0/24          |
+| **Network Security Group**      | ✅ Complete | ASG-based rules implemented                  |
 | **Application Security Groups** | ✅ Complete | ReverseProxy, WebServer, BastionHost, AllVMs |
-| **Reverse Proxy VM** | ✅ Complete | NGINX configured, health check working |
-| **Web Server VM** | ✅ Complete | Systemd service configured for .NET app |
-| **Bastion Host VM** | ✅ Complete | SSH access working |
-| **Cosmos DB Account** | ✅ Complete | MongoDB API, Serverless tier |
-| **MongoDB Database** | ✅ Complete | `TodoAppDb` created via Bicep |
-| **MongoDB Collection** | ✅ Complete | `todos` with shard key `category` |
-| **Bicep Template** | ✅ Complete | All resources provisioned via IaC |
-| **Provisioning Script** | ✅ Complete | `provisioning.sh` with error handling |
-| **Cloud-init Scripts** | ✅ Complete | Base64 encoded, embedded in Bicep |
-| **.NET Todo Application** | ✅ Complete | Clean Architecture, 102 tests passing |
-| **Unit Tests** | ✅ Complete | xUnit, Moq, FluentAssertions |
-| **Architecture Diagrams** | ✅ Complete | Drawio files in `doc/` folder |
+| **Reverse Proxy VM**            | ✅ Complete | NGINX configured, health check working       |
+| **Web Server VM**               | ✅ Complete | Systemd service configured for .NET app      |
+| **Bastion Host VM**             | ✅ Complete | SSH access working                           |
+| **Cosmos DB Account**           | ✅ Complete | MongoDB API, Serverless tier                 |
+| **MongoDB Database**            | ✅ Complete | `TodoAppDb` created via Bicep                |
+| **MongoDB Collection**          | ✅ Complete | `todos` with shard key `category`            |
+| **Bicep Template**              | ✅ Complete | All resources provisioned via IaC            |
+| **Provisioning Script**         | ✅ Complete | `provisioning.sh` with error handling        |
+| **Cloud-init Scripts**          | ✅ Complete | Base64 encoded, embedded in Bicep            |
+| **.NET Todo Application**       | ✅ Complete | Clean Architecture, 102 tests passing        |
+| **Unit Tests**                  | ✅ Complete | xUnit, Moq, FluentAssertions                 |
+| **Architecture Diagrams**       | ✅ Complete | Drawio files in `doc/` folder                |
 
 ### ⏳ Pending
 
-| Component | Status | Notes |
-|-----------|--------|-------|
-| **Application Deployment** | ⏳ Not Yet Deployed | `deploy_app.sh` ready, not executed |
-| **End-to-End Testing** | ⏳ Pending | Requires deployed application |
-| **SSL/TLS Certificate** | ⏳ Not Implemented | NGINX ready for future HTTPS |
-| **Monitoring/Logging** | ⏳ Not Implemented | Could add Azure Monitor/Application Insights |
-| **CI/CD Pipeline** | ⏳ Partial | GitHub Actions workflow exists but not tested |
+| Component                  | Status             | Notes                                                             |
+| -------------------------- | ------------------ | ----------------------------------------------------------------- |
+| **Application Deployment** | ⏳ Not Yet Deployed | Application built but not deployed to web server                  |
+| **End-to-End Testing**     | ⏳ Pending          | Requires deployed application                                     |
+| **CI/CD Pipeline**         | ⏳ Partial          | GitHub Actions workflow exists, self-hosted runner not configured |
 
 ---
 
@@ -349,14 +383,14 @@ The .NET Todo application follows Clean Architecture with proper separation of c
 4. **Clean Architecture** - Separation of Domain, Application, Infrastructure, and Presentation layers
 5. **Test Coverage** - Comprehensive unit tests with FluentAssertions
 
-### Lessons Learned
-
-- MongoDB API in Cosmos DB requires specific capability ordering (`EnableMongo` before `EnableServerless`)
-- NGINX configuration directives must be in correct locations (`worker_connections` in `events` block)
-- Application Security Groups simplify NSG rule management significantly
-- Cloud-init with base64 encoding enables fully automated VM provisioning
-
 ---
+
+## Development tools
+
+- Qwen3.5-27B Large Language Model
+- Llama.cpp
+- Opencode/Roo Code/Pi Coding Agent
+- VSCodium
 
 ## References
 
