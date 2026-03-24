@@ -2,7 +2,7 @@
 param location string = 'denmarkeast'
 
 @description('Virtual network name')
-param vnetName string = 'DemoVNet'
+param vnetName string = 'TodoAppVNet'
 
 @description('Virtual network address prefix')
 param vnetAddressPrefix string = '10.0.0.0/16'
@@ -14,7 +14,7 @@ param subnetName string = 'default'
 param subnetPrefix string = '10.0.0.0/24'
 
 @description('Network security group name')
-param nsgName string = 'DemoNSG'
+param nsgName string = 'TodoAppNSG'
 
 @description('Application security group name for reverse proxy')
 param reverseProxyAsgName string = 'ReverseProxyASG'
