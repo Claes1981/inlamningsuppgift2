@@ -16,7 +16,7 @@ write_files:
   - path: /etc/nginx/sites-available/default
     content: |
       server {
-        listen 8080 default_server;
+        listen 5050 default_server;
         server_name _;
         root /var/www/html;
         index index.html;

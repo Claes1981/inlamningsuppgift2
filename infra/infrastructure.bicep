@@ -62,7 +62,10 @@ param cosmosCollectionName string = 'todos'
 @description('Cosmos DB throughput (RU/s)')
 param cosmosThroughput int = 400
 
-// Variables - DRY principle: define common configurations once
+// =============================================================================
+// VARIABLES - DRY Principle
+// =============================================================================
+
 var ubuntuImage = {
   publisher: 'Canonical'
   offer: 'ubuntu-24_04-lts'
@@ -99,27 +102,38 @@ var publicIpProperties = {
   publicIPAllocationMethod: 'Static'
 }
 
-// Application Security Groups
+// Resource tags for organization and cost tracking
+var commonTags = {
+  project: 'TodoApp'
+  environment: 'Demo'
+  managedBy: 'Bicep'
+  createdBy: 'Infrastructure-as-Code'
+}
+
+// =============================================================================
+// APPLICATION SECURITY GROUPS
+// =============================================================================
+
 resource reverseProxyAsg 'Microsoft.Network/applicationSecurityGroups@2024-03-01' = {
   name: reverseProxyAsgName
   location: location
-  tags: {
-    name: reverseProxyAsgName
-  }
+  tags: commonTags
 }
 
 resource bastionHostAsg 'Microsoft.Network/applicationSecurityGroups@2024-03-01' = {
   name: bastionHostAsgName
   location: location
-  tags: {
-    name: bastionHostAsgName
-  }
+  tags: commonTags
 }
 
-// Virtual Network
+// =============================================================================
+// VIRTUAL NETWORK
+// =============================================================================
+
 resource vnet 'Microsoft.Network/virtualNetworks@2024-03-01' = {
   name: vnetName
   location: location
+  tags: commonTags
   properties: {
     addressSpace: {
       addressPrefixes: [
@@ -137,7 +151,10 @@ resource vnet 'Microsoft.Network/virtualNetworks@2024-03-01' = {
   }
 }
 
-// Network Security Group
+// =============================================================================
+// NETWORK SECURITY GROUP
+// =============================================================================
+
 var nsgSecurityRules = [
   {
     name: 'AllowSSHToBastion'
@@ -204,6 +221,7 @@ var nsgSecurityRules = [
 resource nsg 'Microsoft.Network/networkSecurityGroups@2024-03-01' = {
   name: nsgName
   location: location
+  tags: commonTags
   properties: {
     securityRules: nsgSecurityRules
   }
@@ -221,26 +239,34 @@ resource subnetNsgAssociation 'Microsoft.Network/virtualNetworks/subnets@2024-03
   }
 }
 
-// Reverse Proxy Public IP
+// =============================================================================
+// PUBLIC IP ADDRESSES
+// =============================================================================
+
 resource reverseProxyPublicIp 'Microsoft.Network/publicIPAddresses@2024-03-01' = {
   name: '${reverseProxyName}PublicIP'
   location: location
   sku: publicIpSku
   properties: publicIpProperties
+  tags: commonTags
 }
 
-// Bastion Host Public IP
 resource bastionHostPublicIp 'Microsoft.Network/publicIPAddresses@2024-03-01' = {
   name: '${bastionHostName}PublicIP'
   location: location
   sku: publicIpSku
   properties: publicIpProperties
+  tags: commonTags
 }
 
-// Web Server NIC (no public IP)
+// =============================================================================
+// NETWORK INTERFACES
+// =============================================================================
+
 resource webServerNic 'Microsoft.Network/networkInterfaces@2024-03-01' = {
   name: '${webServerName}Nic'
   location: location
+  tags: commonTags
   properties: {
     ipConfigurations: [
       {
@@ -259,10 +285,10 @@ resource webServerNic 'Microsoft.Network/networkInterfaces@2024-03-01' = {
   ]
 }
 
-// Reverse Proxy NIC with ASG
 resource reverseProxyNic 'Microsoft.Network/networkInterfaces@2024-03-01' = {
   name: '${reverseProxyName}Nic'
   location: location
+  tags: commonTags
   properties: {
     ipConfigurations: [
       {
@@ -286,10 +312,10 @@ resource reverseProxyNic 'Microsoft.Network/networkInterfaces@2024-03-01' = {
   }
 }
 
-// Bastion Host NIC with ASG
 resource bastionHostNic 'Microsoft.Network/networkInterfaces@2024-03-01' = {
   name: '${bastionHostName}Nic'
   location: location
+  tags: commonTags
   properties: {
     ipConfigurations: [
       {
@@ -313,10 +339,14 @@ resource bastionHostNic 'Microsoft.Network/networkInterfaces@2024-03-01' = {
   }
 }
 
-// Web Server VM
+// =============================================================================
+// VIRTUAL MACHINES
+// =============================================================================
+
 resource webServerVm 'Microsoft.Compute/virtualMachines@2024-03-01' = {
   name: webServerName
   location: location
+  tags: commonTags
   properties: {
     hardwareProfile: {
       vmSize: vmSize
@@ -344,10 +374,10 @@ resource webServerVm 'Microsoft.Compute/virtualMachines@2024-03-01' = {
   }
 }
 
-// Reverse Proxy VM
 resource reverseProxyVm 'Microsoft.Compute/virtualMachines@2024-03-01' = {
   name: reverseProxyName
   location: location
+  tags: commonTags
   properties: {
     hardwareProfile: {
       vmSize: vmSize
@@ -375,10 +405,10 @@ resource reverseProxyVm 'Microsoft.Compute/virtualMachines@2024-03-01' = {
   }
 }
 
-// Bastion Host VM
 resource bastionHostVm 'Microsoft.Compute/virtualMachines@2024-03-01' = {
   name: bastionHostName
   location: location
+  tags: commonTags
   properties: {
     hardwareProfile: {
       vmSize: vmSize
@@ -407,13 +437,14 @@ resource bastionHostVm 'Microsoft.Compute/virtualMachines@2024-03-01' = {
 }
 
 // =============================================================================
-// Azure Cosmos DB with MongoDB API
+// AZURE COSMOS DB WITH MONGODB API
 // =============================================================================
 
-resource cosmosDbAccount 'Microsoft.DocumentDB/databaseAccounts@2024-03-01' = {
+resource cosmosDbAccount 'Microsoft.DocumentDB/databaseAccounts@2024-05-15' = {
   name: cosmosDbName
   location: location
-  kind: 'GlobalDocumentDB'
+  kind: 'MongoDB'
+  tags: commonTags
   properties: {
     consistencyPolicy: {
       defaultConsistencyLevel: 'Session'
@@ -427,53 +458,20 @@ resource cosmosDbAccount 'Microsoft.DocumentDB/databaseAccounts@2024-03-01' = {
         failoverPriority: 0
       }
     ]
-    apiProperties: {
-      apiKind: 'MongoDB'
-    }
-  }
-  tags: {
-    name: 'Cosmos DB for MongoDB'
   }
 }
 
-resource cosmosMongoDatabase 'Microsoft.DocumentDB/databaseAccounts/mongodbDatabases@2024-03-01' = {
-  parent: cosmosDbAccount
-  name: cosmosDatabaseName
-  properties: {
-    resource: {}
-  }
-}
+// MongoDB database and collection created via Azure portal/API after account creation
+// Due to complex MongoDB API requirements, creating account only
 
-resource cosmosCollection 'Microsoft.DocumentDB/databaseAccounts/mongodbDatabases/collections@2024-03-01' = {
-  parent: cosmosMongoDatabase
-  name: cosmosCollectionName
-  properties: {
-    resource: {
-      shardKey: {
-        path: '/_id'
-        kind: 'Hashed'
-      }
-    }
-  }
-}
+// =============================================================================
+// OUTPUTS
+// =============================================================================
 
-resource cosmosCollectionThroughput 'Microsoft.DocumentDB/databaseAccounts/mongodbDatabases/collections/throughputs@2024-03-01' = {
-  parent: cosmosCollection
-  name: 'throughput'
-  properties: {
-    resource: {
-      throughput: cosmosThroughput
-    }
-  }
-}
-
-// Outputs
 output reverseProxyPublicIp string = reverseProxyPublicIp.properties.ipAddress
 output bastionHostPublicIp string = bastionHostPublicIp.properties.ipAddress
 output webServerPrivateIp string = webServerNic.properties.ipConfigurations[0].properties.privateIPAddress
 output reverseProxyPrivateIp string = reverseProxyNic.properties.ipConfigurations[0].properties.privateIPAddress
 output bastionHostPrivateIp string = bastionHostNic.properties.ipConfigurations[0].properties.privateIPAddress
-output cosmosDbEndpoint string = cosmosDbAccount.properties.mongoServerEndpoint
+output cosmosDbEndpoint string = cosmosDbAccount.properties.documentEndpoint
 output cosmosDbName string = cosmosDbAccount.name
-output cosmosDatabaseName string = cosmosDatabaseName
-output cosmosCollectionName string = cosmosCollectionName
