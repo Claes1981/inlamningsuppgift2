@@ -66,13 +66,6 @@ write_files:
           }
       }
 
-  - path: /etc/nginx/conf.d/limits.conf
-    permissions: '0644'
-    owner: root:root
-    content: |
-      # Increase worker connections for better performance
-      worker_connections 1024;
-
 runcmd:
   # Add WebServer hostname to /etc/hosts for internal communication
   - echo "10.0.0.4 WebServer" >> /etc/hosts

@@ -50,17 +50,17 @@ param reverseProxyCloudInit string
 @description('Cloud-init configuration for bastion host (base64 encoded)')
 param bastionHostCloudInit string = ''
 
-@description('Cosmos DB name')
-param cosmosDbName string = 'todoappcosmosdb'
+@description('The name of the Cosmos DB account. Must be globally unique.')
+param accountName string = 'claestodoappdbaccount'
 
-@description('Cosmos DB database name')
-param cosmosDatabaseName string = 'TodoAppDb'
+@description('The name of the MongoDB database.')
+param databaseName string = 'TodoAppDb'
 
-@description('Cosmos DB collection name')
-param cosmosCollectionName string = 'todos'
+@description('The name of the MongoDB collection.')
+param collectionName string = 'todos'
 
-@description('Cosmos DB throughput (RU/s)')
-param cosmosThroughput int = 400
+@description('The shard key for the collection.')
+param shardKey string = 'category'
 
 // =============================================================================
 // VARIABLES - DRY Principle
@@ -440,29 +440,56 @@ resource bastionHostVm 'Microsoft.Compute/virtualMachines@2024-03-01' = {
 // AZURE COSMOS DB WITH MONGODB API
 // =============================================================================
 
-resource cosmosDbAccount 'Microsoft.DocumentDB/databaseAccounts@2024-05-15' = {
-  name: cosmosDbName
+resource cosmosAccount 'Microsoft.DocumentDB/databaseAccounts@2024-05-15' = {
+  name: accountName
   location: location
   kind: 'MongoDB'
   tags: commonTags
   properties: {
-    consistencyPolicy: {
-      defaultConsistencyLevel: 'Session'
-    }
     databaseAccountOfferType: 'Standard'
-    enableAutomaticFailover: false
-    enableMultipleWriteLocations: false
+    capabilities: [
+      {
+        name: 'EnableMongo'
+      }
+      {
+        name: 'EnableServerless'
+      }
+    ]
     locations: [
       {
         locationName: location
         failoverPriority: 0
+        isZoneRedundant: false
       }
     ]
+    apiProperties: {
+      serverVersion: '4.2'
+    }
   }
 }
 
-// MongoDB database and collection created via Azure portal/API after account creation
-// Due to complex MongoDB API requirements, creating account only
+resource database 'Microsoft.DocumentDB/databaseAccounts/mongodbDatabases@2024-05-15' = {
+  parent: cosmosAccount
+  name: databaseName
+  properties: {
+    resource: {
+      id: databaseName
+    }
+  }
+}
+
+resource collection 'Microsoft.DocumentDB/databaseAccounts/mongodbDatabases/collections@2024-05-15' = {
+  parent: database
+  name: collectionName
+  properties: {
+    resource: {
+      id: collectionName
+      shardKey: {
+        '${shardKey}': 'Hash'
+      }
+    }
+  }
+}
 
 // =============================================================================
 // OUTPUTS
@@ -473,5 +500,13 @@ output bastionHostPublicIp string = bastionHostPublicIp.properties.ipAddress
 output webServerPrivateIp string = webServerNic.properties.ipConfigurations[0].properties.privateIPAddress
 output reverseProxyPrivateIp string = reverseProxyNic.properties.ipConfigurations[0].properties.privateIPAddress
 output bastionHostPrivateIp string = bastionHostNic.properties.ipConfigurations[0].properties.privateIPAddress
-output cosmosDbEndpoint string = cosmosDbAccount.properties.documentEndpoint
-output cosmosDbName string = cosmosDbAccount.name
+
+@description('The name of the deployed Cosmos DB account.')
+output accountNameOutput string = cosmosAccount.name
+
+@description('The endpoint for the Cosmos DB account.')
+output cosmosDbEndpoint string = cosmosAccount.properties.documentEndpoint
+
+output cosmosDbName string = cosmosAccount.name
+output cosmosDatabaseName string = databaseName
+output cosmosCollectionName string = collectionName
