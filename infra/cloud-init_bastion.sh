@@ -2,7 +2,7 @@
 # Bastion Host Cloud-Init Configuration
 # Configures SSH settings and security hardening
 
-package_update: false
+package_update: true
 package_upgrade: false
 
 packages:

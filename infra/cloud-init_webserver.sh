@@ -2,7 +2,7 @@
 # Web Server Cloud-Init Configuration
 # Installs .NET runtime and configures TodoApp as a systemd service
 
-package_update: false
+package_update: true
 package_upgrade: false
 
 packages:

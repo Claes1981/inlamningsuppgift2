@@ -2,7 +2,7 @@
 # Reverse Proxy Cloud-Init Configuration
 # Installs NGINX and configures it to proxy requests to the TodoApp
 
-package_update: false
+package_update: true
 package_upgrade: false
 
 packages:
