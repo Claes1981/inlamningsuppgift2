@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using TodoApp.Application.Common;
 using TodoApp.Application.DTOs;
 using TodoApp.Domain.Entities;
 using TodoApp.Domain.Repositories;
@@ -38,39 +39,62 @@ public class TodoService : ITodoService
     /// </summary>
     public async Task<TodoDto?> GetTodoByIdAsync(string id)
     {
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            return null;
+        }
+
         var todo = await _todoRepository.GetByIdAsync(id);
         return todo != null ? MapToDto(todo) : null;
     }
 
     /// <summary>
-    /// Creates a new todo item.
+    /// Creates a new todo item with validation.
     /// </summary>
     public async Task<TodoDto> CreateTodoAsync(CreateTodoDto dto)
     {
-        var todo = new Todo
+        if (dto == null)
         {
-            Title = dto.Title,
-            Description = dto.Description,
-            IsCompleted = false
-        };
+            throw new ArgumentNullException(nameof(dto), "CreateTodoDto cannot be null.");
+        }
 
+        // Validate input before creating domain entity
+        if (string.IsNullOrWhiteSpace(dto.Title))
+        {
+            throw new ArgumentException("Title is required.", nameof(dto.Title));
+        }
+
+        // Domain entity will perform additional validation
+        var todo = new Todo(dto.Title, dto.Description);
         var createdTodo = await _todoRepository.AddAsync(todo);
         return MapToDto(createdTodo);
     }
 
     /// <summary>
-    /// Updates an existing todo item.
+    /// Updates an existing todo item with validation.
     /// </summary>
     public async Task<TodoDto> UpdateTodoAsync(string id, UpdateTodoDto dto)
     {
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            throw new ArgumentException("ID is required.", nameof(id));
+        }
+
+        if (dto == null)
+        {
+            throw new ArgumentNullException(nameof(dto), "UpdateTodoDto cannot be null.");
+        }
+
         var todo = await _todoRepository.GetByIdAsync(id);
         if (todo == null)
         {
-            throw new KeyNotFoundException($"Todo with ID {id} not found");
+            throw new KeyNotFoundException($"Todo with ID '{id}' not found.");
         }
 
+        // Update title and description (domain entity validates)
         todo.Update(dto.Title, dto.Description);
 
+        // Update completion status
         if (dto.IsCompleted && !todo.IsCompleted)
         {
             todo.MarkAsCompleted();
@@ -89,6 +113,11 @@ public class TodoService : ITodoService
     /// </summary>
     public async Task<bool> DeleteTodoAsync(string id)
     {
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            return false;
+        }
+
         return await _todoRepository.DeleteAsync(id);
     }
 
@@ -103,7 +132,8 @@ public class TodoService : ITodoService
             Title = todo.Title,
             Description = todo.Description,
             IsCompleted = todo.IsCompleted,
-            CreatedAt = todo.CreatedAt
+            CreatedAt = todo.CreatedAt,
+            UpdatedAt = todo.UpdatedAt
         };
     }
 }

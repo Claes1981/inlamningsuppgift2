@@ -1,13 +1,14 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+using FluentAssertions;
+using Moq;
 using TodoApp.Application.DTOs;
 using TodoApp.Application.Services;
 using TodoApp.Domain.Entities;
 using TodoApp.Domain.Repositories;
-using Moq;
 using Xunit;
-using FluentAssertions;
-using System.Collections.Generic;
-using System.Threading.Tasks;
-using System;
 
 namespace TodoApp.Tests.Application.Services;
 
@@ -30,8 +31,8 @@ public class TodoServiceTests
         // Arrange
         var todos = new List<Todo>
         {
-            new Todo { Id = "1", Title = "Task 1", Description = "Desc 1", IsCompleted = false, CreatedAt = DateTime.UtcNow },
-            new Todo { Id = "2", Title = "Task 2", Description = "Desc 2", IsCompleted = true, CreatedAt = DateTime.UtcNow }
+            new Todo("Task 1", "Desc 1"),
+            new Todo("Task 2", "Desc 2")
         };
         _mockRepository.Setup(repo => repo.GetAllAsync()).ReturnsAsync(todos);
 
@@ -56,6 +57,19 @@ public class TodoServiceTests
         result.Should().BeEmpty();
     }
 
+    [Fact]
+    public async Task GetTodosAsync_WhenRepositoryReturnsNull_ReturnsEmptyList()
+    {
+        // Arrange
+        _mockRepository.Setup(repo => repo.GetAllAsync()).ReturnsAsync((IEnumerable<Todo>)null!);
+
+        // Act
+        var result = await _service.GetTodosAsync();
+
+        // Assert
+        result.Should().BeEmpty();
+    }
+
     #endregion
 
     #region GetTodoByIdAsync
@@ -64,15 +78,15 @@ public class TodoServiceTests
     public async Task GetTodoByIdAsync_WhenTodoExists_ReturnsTodoDto()
     {
         // Arrange
-        var todo = new Todo { Id = "1", Title = "Task 1", Description = "Desc 1", IsCompleted = false, CreatedAt = DateTime.UtcNow };
-        _mockRepository.Setup(repo => repo.GetByIdAsync("1")).ReturnsAsync(todo);
+        var todo = new Todo("Task 1", "Desc 1");
+        _mockRepository.Setup(repo => repo.GetByIdAsync(todo.Id)).ReturnsAsync(todo);
 
         // Act
-        var result = await _service.GetTodoByIdAsync("1");
+        var result = await _service.GetTodoByIdAsync(todo.Id);
 
         // Assert
         result.Should().NotBeNull();
-        result!.Id.Should().Be("1");
+        result!.Id.Should().Be(todo.Id);
         result.Title.Should().Be("Task 1");
     }
 
@@ -89,6 +103,28 @@ public class TodoServiceTests
         result.Should().BeNull();
     }
 
+    [Fact]
+    public async Task GetTodoByIdAsync_WithEmptyId_ReturnsNull()
+    {
+        // Act
+        var result = await _service.GetTodoByIdAsync("");
+
+        // Assert
+        result.Should().BeNull();
+        _mockRepository.Verify(repo => repo.GetByIdAsync(It.IsAny<string>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task GetTodoByIdAsync_WithNullId_ReturnsNull()
+    {
+        // Act
+        var result = await _service.GetTodoByIdAsync(null!);
+
+        // Assert
+        result.Should().BeNull();
+        _mockRepository.Verify(repo => repo.GetByIdAsync(It.IsAny<string>()), Times.Never);
+    }
+
     #endregion
 
     #region CreateTodoAsync
@@ -98,7 +134,7 @@ public class TodoServiceTests
     {
         // Arrange
         var dto = new CreateTodoDto { Title = "New Task", Description = "New Description" };
-        var createdTodo = new Todo { Id = "1", Title = "New Task", Description = "New Description", IsCompleted = false, CreatedAt = DateTime.UtcNow };
+        var createdTodo = new Todo("New Task", "New Description");
         _mockRepository.Setup(repo => repo.AddAsync(It.IsAny<Todo>())).ReturnsAsync(createdTodo);
 
         // Act
@@ -111,6 +147,45 @@ public class TodoServiceTests
         result.IsCompleted.Should().BeFalse();
     }
 
+    [Fact]
+    public async Task CreateTodoAsync_WithNullDto_ThrowsArgumentNullException()
+    {
+        // Act
+        var act = () => _service.CreateTodoAsync(null!);
+
+        // Assert
+        await act.Should().ThrowAsync<ArgumentNullException>()
+            .WithMessage("*CreateTodoDto cannot be null*");
+    }
+
+    [Fact]
+    public async Task CreateTodoAsync_WithEmptyTitle_ThrowsArgumentException()
+    {
+        // Arrange
+        var dto = new CreateTodoDto { Title = "", Description = "Description" };
+
+        // Act
+        var act = () => _service.CreateTodoAsync(dto);
+
+        // Assert
+        await act.Should().ThrowAsync<ArgumentException>()
+            .WithMessage("*Title is required*");
+    }
+
+    [Fact]
+    public async Task CreateTodoAsync_WithWhitespaceTitle_ThrowsArgumentException()
+    {
+        // Arrange
+        var dto = new CreateTodoDto { Title = "   ", Description = "Description" };
+
+        // Act
+        var act = () => _service.CreateTodoAsync(dto);
+
+        // Assert
+        await act.Should().ThrowAsync<ArgumentException>()
+            .WithMessage("*Title is required*");
+    }
+
     #endregion
 
     #region UpdateTodoAsync
@@ -119,14 +194,14 @@ public class TodoServiceTests
     public async Task UpdateTodoAsync_WithValidData_ReturnsUpdatedTodoDto()
     {
         // Arrange
-        var existingTodo = new Todo { Id = "1", Title = "Old Title", Description = "Old Desc", IsCompleted = false, CreatedAt = DateTime.UtcNow };
+        var existingTodo = new Todo("Old Title", "Old Desc");
         var dto = new UpdateTodoDto { Title = "New Title", Description = "New Desc", IsCompleted = true };
         
-        _mockRepository.Setup(repo => repo.GetByIdAsync("1")).ReturnsAsync(existingTodo);
+        _mockRepository.Setup(repo => repo.GetByIdAsync(existingTodo.Id)).ReturnsAsync(existingTodo);
         _mockRepository.Setup(repo => repo.UpdateAsync(It.IsAny<Todo>())).ReturnsAsync(existingTodo);
 
         // Act
-        var result = await _service.UpdateTodoAsync("1", dto);
+        var result = await _service.UpdateTodoAsync(existingTodo.Id, dto);
 
         // Assert
         result.Should().NotBeNull();
@@ -143,6 +218,44 @@ public class TodoServiceTests
 
         // Act & Assert
         await Assert.ThrowsAsync<KeyNotFoundException>(() => _service.UpdateTodoAsync("nonexistent", dto));
+    }
+
+    [Fact]
+    public async Task UpdateTodoAsync_WithEmptyId_ThrowsArgumentException()
+    {
+        // Arrange
+        var dto = new UpdateTodoDto { Title = "New Title" };
+
+        // Act & Assert
+        await Assert.ThrowsAsync<ArgumentException>(() => _service.UpdateTodoAsync("", dto));
+    }
+
+    [Fact]
+    public async Task UpdateTodoAsync_WithNullDto_ThrowsArgumentNullException()
+    {
+        // Arrange
+        var existingTodo = new Todo("Old Title");
+        _mockRepository.Setup(repo => repo.GetByIdAsync(existingTodo.Id)).ReturnsAsync(existingTodo);
+
+        // Act & Assert
+        await Assert.ThrowsAsync<ArgumentNullException>(() => _service.UpdateTodoAsync(existingTodo.Id, null!));
+    }
+
+    [Fact]
+    public async Task UpdateTodoAsync_ChangesCompletionStatus_CallsMarkAsCompleted()
+    {
+        // Arrange
+        var existingTodo = new Todo("Task");
+        var dto = new UpdateTodoDto { Title = "Task", IsCompleted = true };
+        
+        _mockRepository.Setup(repo => repo.GetByIdAsync(existingTodo.Id)).ReturnsAsync(existingTodo);
+        _mockRepository.Setup(repo => repo.UpdateAsync(It.IsAny<Todo>())).ReturnsAsync(existingTodo);
+
+        // Act
+        await _service.UpdateTodoAsync(existingTodo.Id, dto);
+
+        // Assert
+        _mockRepository.Verify(repo => repo.UpdateAsync(It.Is<Todo>(t => t.IsCompleted)), Times.Once);
     }
 
     #endregion
@@ -173,6 +286,28 @@ public class TodoServiceTests
 
         // Assert
         result.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task DeleteTodoAsync_WithEmptyId_ReturnsFalse()
+    {
+        // Act
+        var result = await _service.DeleteTodoAsync("");
+
+        // Assert
+        result.Should().BeFalse();
+        _mockRepository.Verify(repo => repo.DeleteAsync(It.IsAny<string>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task DeleteTodoAsync_WithNullId_ReturnsFalse()
+    {
+        // Act
+        var result = await _service.DeleteTodoAsync(null!);
+
+        // Assert
+        result.Should().BeFalse();
+        _mockRepository.Verify(repo => repo.DeleteAsync(It.IsAny<string>()), Times.Never);
     }
 
     #endregion
