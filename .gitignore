@@ -68,6 +68,8 @@ Thumbs.db
 *.swp
 *~
 
+*.bkp
+
 infra/actions-runner
 
 tests/Infrastructure.Tests/TestResults
