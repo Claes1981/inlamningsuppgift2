@@ -8,6 +8,7 @@ package_upgrade: false
 packages:
   - openssh-server
   - wget
+  - curl
   - apt-transport-https
   - software-properties-common
 
@@ -56,3 +57,12 @@ runcmd:
   # Ensure SSH is running
   - systemctl enable ssh || true
   - systemctl start ssh || true
+
+  # Download and configure GitHub Actions runner
+  - mkdir -p /home/azureuser/actions-runner
+  - cd /home/azureuser/actions-runner
+  - curl -o actions-runner-linux-x64-2.333.0.tar.gz -L https://github.com/actions/runner/releases/download/v2.333.0/actions-runner-linux-x64-2.333.0.tar.gz
+  - echo "7ce6b3fd8f879797fcc252c2918a23e14a233413dc6e6ab8e0ba8768b5d54475  actions-runner-linux-x64-2.333.0.tar.gz" | shasum -a 256 -c
+  - tar xzf ./actions-runner-linux-x64-2.333.0.tar.gz
+  - chmod +x ./config.sh
+  - echo "{{GITHUB_TOKEN}}" | ./config.sh --unattended --url https://github.com/Claes1981/inlamningsuppgift2 --token

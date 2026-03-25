@@ -32,6 +32,9 @@ readonly MAX_RETRY_ATTEMPTS=60
 readonly RETRY_DELAY_SECONDS=5
 readonly PROVISIONING_OUTPUTS_FILE="/tmp/provisioning_outputs.json"
 
+# GitHub token (set by prompt_github_token)
+GITHUB_TOKEN=""
+
 # =============================================================================
 # UTILITY FUNCTIONS
 # =============================================================================
@@ -238,23 +241,46 @@ wait_for_resource() {
 # PROVISIONING FUNCTIONS
 # =============================================================================
 
+prompt_github_token() {
+  log_section "GitHub Actions Runner Configuration"
+  echo "Please enter your GitHub Actions PAT token for the runner configuration."
+  echo "The token should have 'repo' and 'workflow' scopes."
+  echo ""
+  read -sp "Enter token: " GITHUB_TOKEN
+  echo ""
+  
+  if [[ -z "${GITHUB_TOKEN}" ]]; then
+    log_error "GitHub token cannot be empty"
+    return 1
+  fi
+  
+  log "Token received (not displayed for security)"
+}
+
 encode_cloud_init() {
   local cloud_init_file="$1"
-  base64 -w0 < "${cloud_init_file}"
+  local token="$2"
+  
+  if [[ -n "${token}" ]]; then
+    sed "s/{{GITHUB_TOKEN}}/${token}/g" "${cloud_init_file}" | base64 -w0
+  else
+    base64 -w0 < "${cloud_init_file}"
+  fi
 }
 
 create_provisioning_parameters() {
   local ssh_key="$1"
-  local output_file="$2"
+  local github_token="$2"
+  local output_file="$3"
 
   local web_server_cloud_init
-  web_server_cloud_init=$(encode_cloud_init "${CLOUD_INIT_WEBSERVER}")
+  web_server_cloud_init=$(encode_cloud_init "${CLOUD_INIT_WEBSERVER}" "${github_token}")
 
   local reverse_proxy_cloud_init
-  reverse_proxy_cloud_init=$(encode_cloud_init "${CLOUD_INIT_REVERSEPROXY}")
+  reverse_proxy_cloud_init=$(encode_cloud_init "${CLOUD_INIT_REVERSEPROXY}" "")
 
   local bastion_host_cloud_init
-  bastion_host_cloud_init=$(encode_cloud_init "${CLOUD_INIT_BASTION}")
+  bastion_host_cloud_init=$(encode_cloud_init "${CLOUD_INIT_BASTION}" "")
 
   cat > "${output_file}" << EOF
 {
@@ -294,11 +320,16 @@ provision_infrastructure() {
 
   log "SSH key length: ${#ssh_key} characters"
 
+  if ! prompt_github_token; then
+    log_error "Failed to get GitHub token"
+    return 1
+  fi
+
   local params_file
   params_file=$(mktemp)
   trap 'rm -f "${params_file:-}"' RETURN
 
-  create_provisioning_parameters "${ssh_key}" "${params_file}"
+  create_provisioning_parameters "${ssh_key}" "${GITHUB_TOKEN}" "${params_file}"
 
   log "Provisioning Bicep template to resource group: ${RESOURCE_GROUP}"
 
@@ -323,9 +354,8 @@ provision_infrastructure() {
   ssh-keygen -R "10.0.0.5" 2>/dev/null || true
   ssh-keygen -R "10.0.0.6" 2>/dev/null || true
   
-  # Transfer GitHub Actions runner files to web server
-  log "Transferring GitHub Actions runner to web server..."
-  transfer_actions_runner "${bastion_ip}"
+  # GitHub Actions runner is configured via cloud-init on web server
+  log "GitHub Actions runner will be configured automatically via cloud-init"
   
   log "Infrastructure provisioning completed"
 }
@@ -350,48 +380,6 @@ wait_for_vm_accessible() {
   
   log_error "VM ${ip_address} did not become accessible after ${MAX_RETRY_ATTEMPTS} attempts"
   return 1
-}
-
-# Transfer GitHub Actions runner files
-transfer_actions_runner() {
-  local bastion_ip="$1"
-  local source_dir="${SCRIPT_DIR}/actions-runner"
-  local remote_user="${ADMIN_USERNAME}"
-  local remote_host="10.0.0.6"
-  local remote_dir="/home/${remote_user}/actions-runner"
-  
-  log "Checking if source directory exists: ${source_dir}"
-  if [[ ! -d "${source_dir}" ]]; then
-    log_warning "Actions runner directory not found, skipping transfer"
-    return 0
-  fi
-  
-  # Wait a bit for web server to be ready after bastion
-  log "Waiting for web server to be ready..."
-  sleep 10
-  
-  # Create remote directory
-  log "Creating remote directory on web server..."
-  ssh -o BatchMode=yes \
-      -o ProxyJump="${remote_user}@${bastion_ip}" \
-      -o StrictHostKeyChecking=no \
-      -o UserKnownHostsFile=/dev/null \
-      -o ConnectTimeout=15 \
-      "${remote_user}@${remote_host}" \
-      "mkdir -p ${remote_dir}"
-  
-  # Copy files using scp (more widely available than rsync)
-  log "Transferring files to web server..."
-  scp -r \
-    -o BatchMode=yes \
-    -o ProxyJump="${remote_user}@${bastion_ip}" \
-    -o StrictHostKeyChecking=no \
-    -o UserKnownHostsFile=/dev/null \
-    -o ConnectTimeout=30 \
-    "${source_dir}/." \
-    "${remote_user}@${remote_host}:${remote_dir}/"
-  
-  log "GitHub Actions runner transferred successfully"
 }
 
 # =============================================================================
