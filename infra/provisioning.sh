@@ -28,8 +28,8 @@ readonly CLOUD_INIT_BASTION="${SCRIPT_DIR}/cloud-init_bastion.sh"
 
 readonly CLOUD_INIT_FILES=("${CLOUD_INIT_WEBSERVER}" "${CLOUD_INIT_REVERSEPROXY}" "${CLOUD_INIT_BASTION}")
 
-readonly MAX_RETRY_ATTEMPTS=30
-readonly RETRY_DELAY_SECONDS=2
+readonly MAX_RETRY_ATTEMPTS=60
+readonly RETRY_DELAY_SECONDS=5
 readonly PROVISIONING_OUTPUTS_FILE="/tmp/provisioning_outputs.json"
 
 # =============================================================================
@@ -309,7 +309,89 @@ provision_infrastructure() {
     --query 'properties.outputs' \
     --output json > "${PROVISIONING_OUTPUTS_FILE}"
 
+  local bastion_ip
+  bastion_ip=$(get_vm_public_ip "${BASTION_HOST_NAME}")
+  
+  # Wait for bastion host to be accessible
+  log "Waiting for bastion host to be accessible..."
+  wait_for_vm_accessible "${bastion_ip}" "${ADMIN_USERNAME}"
+  
+  # Remove old host keys from known_hosts to avoid conflicts
+  log "Cleaning up old SSH host keys..."
+  ssh-keygen -R "${bastion_ip}" 2>/dev/null || true
+  ssh-keygen -R "10.0.0.4" 2>/dev/null || true
+  ssh-keygen -R "10.0.0.5" 2>/dev/null || true
+  ssh-keygen -R "10.0.0.6" 2>/dev/null || true
+  
+  # Transfer GitHub Actions runner files to web server
+  log "Transferring GitHub Actions runner to web server..."
+  transfer_actions_runner "${bastion_ip}"
+  
   log "Infrastructure provisioning completed"
+}
+
+# Wait for VM to be accessible via SSH
+wait_for_vm_accessible() {
+  local ip_address="$1"
+  local username="$2"
+  local attempt=0
+  
+  while [[ ${attempt} -lt ${MAX_RETRY_ATTEMPTS} ]]; do
+    attempt=$((attempt + 1))
+    
+    if ssh -o ConnectTimeout=10 -o BatchMode=yes -o StrictHostKeyChecking=no "${username}@${ip_address}" "echo 'accessible'" > /dev/null 2>&1; then
+      log "VM ${ip_address} is accessible"
+      return 0
+    fi
+    
+    log "Attempt ${attempt}/${MAX_RETRY_ATTEMPTS}: VM not accessible yet, waiting ${RETRY_DELAY_SECONDS}s..."
+    sleep "${RETRY_DELAY_SECONDS}"
+  done
+  
+  log_error "VM ${ip_address} did not become accessible after ${MAX_RETRY_ATTEMPTS} attempts"
+  return 1
+}
+
+# Transfer GitHub Actions runner files
+transfer_actions_runner() {
+  local bastion_ip="$1"
+  local source_dir="${SCRIPT_DIR}/actions-runner"
+  local remote_user="${ADMIN_USERNAME}"
+  local remote_host="10.0.0.6"
+  local remote_dir="/home/${remote_user}/actions-runner"
+  
+  log "Checking if source directory exists: ${source_dir}"
+  if [[ ! -d "${source_dir}" ]]; then
+    log_warning "Actions runner directory not found, skipping transfer"
+    return 0
+  fi
+  
+  # Wait a bit for web server to be ready after bastion
+  log "Waiting for web server to be ready..."
+  sleep 10
+  
+  # Create remote directory
+  log "Creating remote directory on web server..."
+  ssh -o BatchMode=yes \
+      -o ProxyJump="${remote_user}@${bastion_ip}" \
+      -o StrictHostKeyChecking=no \
+      -o UserKnownHostsFile=/dev/null \
+      -o ConnectTimeout=15 \
+      "${remote_user}@${remote_host}" \
+      "mkdir -p ${remote_dir}"
+  
+  # Copy files using scp (more widely available than rsync)
+  log "Transferring files to web server..."
+  scp -r \
+    -o BatchMode=yes \
+    -o ProxyJump="${remote_user}@${bastion_ip}" \
+    -o StrictHostKeyChecking=no \
+    -o UserKnownHostsFile=/dev/null \
+    -o ConnectTimeout=30 \
+    "${source_dir}/." \
+    "${remote_user}@${remote_host}:${remote_dir}/"
+  
+  log "GitHub Actions runner transferred successfully"
 }
 
 # =============================================================================

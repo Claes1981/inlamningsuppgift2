@@ -6,6 +6,7 @@ package_update: true
 package_upgrade: false
 
 packages:
+  - openssh-server
   - wget
   - apt-transport-https
   - software-properties-common
@@ -51,3 +52,7 @@ runcmd:
 
   # Set resource limits for the service
   - systemctl set-property GithubActionsTodoApp.service MemoryMax=512M || true
+
+  # Ensure SSH is running
+  - systemctl enable ssh || true
+  - systemctl start ssh || true

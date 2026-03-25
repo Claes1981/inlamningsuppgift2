@@ -31,9 +31,7 @@ runcmd:
   # Reload SSH configuration
   - systemctl reload sshd || true
 
-  # Configure firewall to allow SSH
-  - ufw allow 22/tcp || true
-  - ufw --force enable || true
+  # Note: Firewall handled by Azure NSG, not ufw
 
   # Set hostname
   - hostnamectl set-hostname BastionHost || true
