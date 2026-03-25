@@ -68,5 +68,7 @@ Thumbs.db
 *.swp
 *~
 
+infra/actions-runner
+
 tests/Infrastructure.Tests/TestResults
 tests/TodoApp.Tests/TestResults
