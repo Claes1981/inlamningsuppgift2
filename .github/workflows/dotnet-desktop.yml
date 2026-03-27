@@ -85,6 +85,7 @@ jobs:
       uses: actions/download-artifact@v4
       with:
         name: app-artifacts
+        path: /tmp/app-artifacts
 
     - name: Stop the application service
       run: |
@@ -93,7 +94,7 @@ jobs:
     - name: Deploy the the application
       run: |
         sudo rm -Rf /opt/GithubActionsTodoApp || true
-        sudo cp -r ${{ github.workspace }}/app-artifacts/ /opt/GithubActionsTodoApp
+        sudo cp -r /tmp/app-artifacts/ /opt/GithubActionsTodoApp
         sudo chown -R www-data:www-data /opt/GithubActionsTodoApp        
 
     - name: Start the application service
