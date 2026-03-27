@@ -60,9 +60,17 @@ runcmd:
 
   # Download and configure GitHub Actions runner
   - mkdir -p /home/azureuser/actions-runner
-  - cd /home/azureuser/actions-runner
-  - curl -o actions-runner-linux-x64-2.333.0.tar.gz -L https://github.com/actions/runner/releases/download/v2.333.0/actions-runner-linux-x64-2.333.0.tar.gz
+  - curl -o /tmp/actions-runner-linux-x64-2.333.0.tar.gz -L https://github.com/actions/runner/releases/download/v2.333.0/actions-runner-linux-x64-2.333.0.tar.gz
   - echo "7ce6b3fd8f879797fcc252c2918a23e14a233413dc6e6ab8e0ba8768b5d54475  actions-runner-linux-x64-2.333.0.tar.gz" | shasum -a 256 -c
-  - tar xzf ./actions-runner-linux-x64-2.333.0.tar.gz
-  - chmod +x ./config.sh
-  - echo "{{GITHUB_TOKEN}}" | ./config.sh --unattended --url https://github.com/Claes1981/inlamningsuppgift2 --token
+  - tar xzf /tmp/actions-runner-linux-x64-2.333.0.tar.gz -C /home/azureuser/actions-runner
+  - chown -R azureuser:azureuser /home/azureuser/actions-runner
+  - chmod +x /home/azureuser/actions-runner/config.sh
+  - echo "{{GITHUB_TOKEN}}" > /tmp/runner_token.txt
+  - chown azureuser:azureuser /tmp/runner_token.txt
+  - su - azureuser -c "cd /home/azureuser/actions-runner && ./config.sh --unattended --url https://github.com/Claes1981/inlamningsuppgift2 --token $(cat /tmp/runner_token.txt)"
+  - rm /tmp/runner_token.txt
+  - # Run the Github runner as a service
+  - su - azureuser -c "/home/azureuser/actions-runner/svc.sh install azureuser"
+  - su - azureuser -c "/home/azureuser/actions-runner/svc.sh start"
+
+
