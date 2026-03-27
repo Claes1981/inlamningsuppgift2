@@ -20,7 +20,7 @@ write_files:
 
       [Service]
       WorkingDirectory=/opt/GithubActionsTodoApp
-      ExecStart=/usr/bin/dotnet /opt/GithubActionsTodoApp/GithubActionsTodoApp.dll
+      ExecStart=/usr/bin/dotnet /opt/GithubActionsTodoApp/TodoApp.dll
       Restart=always
       RestartSec=10
       KillSignal=SIGINT
