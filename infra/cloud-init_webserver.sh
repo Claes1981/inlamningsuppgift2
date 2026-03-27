@@ -67,10 +67,10 @@ runcmd:
   - chmod +x /home/azureuser/actions-runner/config.sh
   - echo "{{GITHUB_TOKEN}}" > /tmp/runner_token.txt
   - chown azureuser:azureuser /tmp/runner_token.txt
-  - su - azureuser -c "cd /home/azureuser/actions-runner && ./config.sh --unattended --url https://github.com/Claes1981/inlamningsuppgift2 --token $(cat /tmp/runner_token.txt)"
+  - su - azureuser -c "cd /home/azureuser/actions-runner && ./config.sh --unattended --replace --url https://github.com/Claes1981/inlamningsuppgift2 --token $(cat /tmp/runner_token.txt)"
   - rm /tmp/runner_token.txt
-  - # Run the Github runner as a service
-  - su - azureuser -c "/home/azureuser/actions-runner/svc.sh install azureuser"
-  - su - azureuser -c "/home/azureuser/actions-runner/svc.sh start"
+  - # Run the Github runner as a service (requires root)
+  - cd /home/azureuser/actions-runner && ./svc.sh install azureuser
+  - cd /home/azureuser/actions-runner && ./svc.sh start
 
 
