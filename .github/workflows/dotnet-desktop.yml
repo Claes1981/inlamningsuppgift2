@@ -93,7 +93,8 @@ jobs:
     - name: Deploy the the application
       run: |
         sudo rm -Rf /opt/GithubActionsTodoApp || true
-        sudo cp -r /home/azureuser/actions-runner/_work/GithubActionsTodoApp/GithubActionsTodoApp/ /opt/GithubActionsTodoApp        
+        sudo cp -r ${{ github.workspace }}/app-artifacts/ /opt/GithubActionsTodoApp
+        sudo chown -R www-data:www-data /opt/GithubActionsTodoApp        
 
     - name: Start the application service
       run: |
