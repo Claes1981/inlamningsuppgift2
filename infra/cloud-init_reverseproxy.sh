@@ -15,7 +15,7 @@ write_files:
     content: |
       # Upstream configuration for TodoApp backend
       upstream todoapp {
-          server 10.0.0.4:5000;
+          server 10.0.0.6:5000;
           keepalive 32;
       }
 
@@ -68,7 +68,7 @@ write_files:
 
 runcmd:
   # Add WebServer hostname to /etc/hosts for internal communication
-  - echo "10.0.0.4 WebServer" >> /etc/hosts
+  - echo "10.0.0.6 WebServer" >> /etc/hosts
 
   # Remove default site if it exists and create symlink
   - rm -f /etc/nginx/sites-enabled/default || true
