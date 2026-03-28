@@ -93,9 +93,18 @@ jobs:
 
     - name: Deploy the the application
       run: |
-        sudo rm -Rf /opt/GithubActionsTodoApp || true
+        # Backup appsettings.Production.json if it exists
+        sudo cp /opt/GithubActionsTodoApp/appsettings.Production.json /tmp/appsettings.Production.json.backup 2>/dev/null || true
+        # Remove old deployment
+        sudo rm -Rf /opt/GithubActionsTodoApp
+        # Deploy new files
         sudo cp -r /tmp/app-artifacts/ /opt/GithubActionsTodoApp
-        sudo chown -R www-data:www-data /opt/GithubActionsTodoApp        
+        sudo chown -R www-data:www-data /opt/GithubActionsTodoApp
+        # Restore appsettings.Production.json
+        if [ -f /tmp/appsettings.Production.json.backup ]; then
+          sudo cp /tmp/appsettings.Production.json.backup /opt/GithubActionsTodoApp/appsettings.Production.json
+          sudo chown www-data:www-data /opt/GithubActionsTodoApp/appsettings.Production.json
+        fi        
 
     - name: Start the application service
       run: |
