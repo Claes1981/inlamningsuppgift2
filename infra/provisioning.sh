@@ -30,10 +30,14 @@ readonly CLOUD_INIT_FILES=("${CLOUD_INIT_WEBSERVER}" "${CLOUD_INIT_REVERSEPROXY}
 
 readonly MAX_RETRY_ATTEMPTS=60
 readonly RETRY_DELAY_SECONDS=5
+readonly COSMOS_DB_RETRY_DELAY_SECONDS=10
 readonly PROVISIONING_OUTPUTS_FILE="/tmp/provisioning_outputs.json"
 
-# GitHub token (set by prompt_github_token)
-GITHUB_TOKEN=""
+# GitHub token (set by prompt_github_token or environment variable)
+GITHUB_TOKEN="${GITHUB_TOKEN:-}"
+
+# MongoDB connection string (set by prompt_mongodb_connection_string)
+MONGODB_CONNECTION_STRING=""
 
 # =============================================================================
 # UTILITY FUNCTIONS
@@ -237,16 +241,84 @@ wait_for_resource() {
   return 1
 }
 
+# Wait for Cosmos DB to be ready
+wait_for_cosmos_db() {
+  local account_name="$1"
+  
+  log "Waiting for Cosmos DB '${account_name}' to be ready..."
+  
+  local attempt=0
+  
+  while [[ ${attempt} -lt ${MAX_RETRY_ATTEMPTS} ]]; do
+    attempt=$((attempt + 1))
+    
+    local provisioning_state
+    provisioning_state=$(az cosmosdb show \
+      --name "${account_name}" \
+      --resource-group "${RESOURCE_GROUP}" \
+      --query 'provisioningState' \
+      --output tsv 2>&1)
+    
+    # Check if command failed
+    if [[ "${provisioning_state}" == *"ERROR"* || "${provisioning_state}" == *"error"* ]]; then
+      log "Attempt ${attempt}/${MAX_RETRY_ATTEMPTS}: Error querying Cosmos DB, waiting ${COSMOS_DB_RETRY_DELAY_SECONDS}s..."
+      sleep "${COSMOS_DB_RETRY_DELAY_SECONDS}"
+      continue
+    fi
+    
+    if [[ "${provisioning_state}" == "Succeeded" ]]; then
+      log "Cosmos DB '${account_name}' is ready"
+      return 0
+    fi
+    
+    log "Attempt ${attempt}/${MAX_RETRY_ATTEMPTS}: Cosmos DB provisioning state: '${provisioning_state}', waiting ${COSMOS_DB_RETRY_DELAY_SECONDS}s..."
+    sleep "${COSMOS_DB_RETRY_DELAY_SECONDS}"
+  done
+  
+  log_error "Cosmos DB '${account_name}' did not become ready"
+  return 1
+}
+
+# Generate MongoDB connection string from Cosmos DB
+generate_mongodb_connection_string() {
+  local account_name="$1"
+  
+  log "Generating MongoDB connection string for Cosmos DB '${account_name}'..."
+  
+  # Get the full connection string from Cosmos DB
+  MONGODB_CONNECTION_STRING=$(az cosmosdb keys list \
+    --name "${account_name}" \
+    --resource-group "${RESOURCE_GROUP}" \
+    --type connection-strings \
+    --query 'connectionStrings[0].connectionString' \
+    --output tsv 2>/dev/null)
+  
+  if [[ -z "${MONGODB_CONNECTION_STRING}" ]]; then
+    log_error "Failed to retrieve Cosmos DB connection string"
+    return 1
+  fi
+  
+  log "MongoDB connection string generated successfully"
+}
+
 # =============================================================================
 # PROVISIONING FUNCTIONS
 # =============================================================================
 
 prompt_github_token() {
   log_section "GitHub Actions Runner Configuration"
+  
+  if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+    log "Using GITHUB_TOKEN from environment variable"
+    log "Token received (not displayed for security)"
+    return 0
+  fi
+  
   echo "Please enter your GitHub Actions PAT token for the runner configuration."
   echo "The token should have 'repo' and 'workflow' scopes."
+  echo "Alternatively, set the GITHUB_TOKEN environment variable."
   echo ""
-  read -sp "Enter token: " GITHUB_TOKEN
+  read -rsp "Enter token: " GITHUB_TOKEN
   echo ""
   
   if [[ -z "${GITHUB_TOKEN}" ]]; then
@@ -260,12 +332,21 @@ prompt_github_token() {
 encode_cloud_init() {
   local cloud_init_file="$1"
   local token="$2"
+  local mongo_connection_string="$3"
+  
+  local temp_file="${cloud_init_file}.tmp"
+  cp "${cloud_init_file}" "${temp_file}"
   
   if [[ -n "${token}" ]]; then
-    sed "s/{{GITHUB_TOKEN}}/${token}/g" "${cloud_init_file}" | base64 -w0
-  else
-    base64 -w0 < "${cloud_init_file}"
+    sed -i "s|{{GITHUB_TOKEN}}|${token}|g" "${temp_file}"
   fi
+  
+  if [[ -n "${mongo_connection_string}" ]]; then
+    sed -i "s|{{MONGODB_CONNECTION_STRING}}|${mongo_connection_string}|g" "${temp_file}"
+  fi
+  
+  base64 -w0 < "${temp_file}"
+  rm -f "${temp_file}"
 }
 
 create_provisioning_parameters() {
@@ -274,13 +355,13 @@ create_provisioning_parameters() {
   local output_file="$3"
 
   local web_server_cloud_init
-  web_server_cloud_init=$(encode_cloud_init "${CLOUD_INIT_WEBSERVER}" "${github_token}")
+  web_server_cloud_init=$(encode_cloud_init "${CLOUD_INIT_WEBSERVER}" "${github_token}" "")
 
   local reverse_proxy_cloud_init
-  reverse_proxy_cloud_init=$(encode_cloud_init "${CLOUD_INIT_REVERSEPROXY}" "")
+  reverse_proxy_cloud_init=$(encode_cloud_init "${CLOUD_INIT_REVERSEPROXY}" "" "")
 
   local bastion_host_cloud_init
-  bastion_host_cloud_init=$(encode_cloud_init "${CLOUD_INIT_BASTION}" "")
+  bastion_host_cloud_init=$(encode_cloud_init "${CLOUD_INIT_BASTION}" "" "")
 
   cat > "${output_file}" << EOF
 {
@@ -340,6 +421,26 @@ provision_infrastructure() {
     --query 'properties.outputs' \
     --output json > "${PROVISIONING_OUTPUTS_FILE}"
 
+  # Get Cosmos DB account name from outputs (handle JSON structure)
+  local cosmos_account_name
+  cosmos_account_name=$(jq -r '.accountNameOutput.value // .accountNameOutput // empty' "${PROVISIONING_OUTPUTS_FILE}")
+  
+  if [[ -n "${cosmos_account_name}" && "${cosmos_account_name}" != "null" ]]; then
+    # Wait for Cosmos DB to be ready
+    if ! wait_for_cosmos_db "${cosmos_account_name}"; then
+      log_error "Failed to wait for Cosmos DB"
+      return 1
+    fi
+    
+    # Generate MongoDB connection string
+    if ! generate_mongodb_connection_string "${cosmos_account_name}"; then
+      log_error "Failed to generate MongoDB connection string"
+      return 1
+    fi
+    
+    log "MongoDB connection string: ${MONGODB_CONNECTION_STRING:0:50}..."
+  fi
+
   local bastion_ip
   bastion_ip=$(get_vm_public_ip "${BASTION_HOST_NAME}")
   
@@ -354,6 +455,18 @@ provision_infrastructure() {
   ssh-keygen -R "10.0.0.5" 2>/dev/null || true
   ssh-keygen -R "10.0.0.6" 2>/dev/null || true
   
+  # Wait for web server to be accessible and deploy MongoDB connection string
+  local web_server_ip
+  web_server_ip=$(get_vm_private_ip "${WEB_SERVER_NAME}")
+  
+  if [[ -n "${web_server_ip}" ]]; then
+    log "Waiting for web server to be accessible..."
+    wait_for_vm_accessible "${web_server_ip}" "${ADMIN_USERNAME}" "${ADMIN_USERNAME}@${bastion_ip}"
+    
+    # Deploy MongoDB connection string
+    deploy_mongodb_connection_string "${web_server_ip}" "${MONGODB_CONNECTION_STRING}"
+  fi
+  
   # GitHub Actions runner is configured via cloud-init on web server
   log "GitHub Actions runner will be configured automatically via cloud-init"
   
@@ -364,14 +477,22 @@ provision_infrastructure() {
 wait_for_vm_accessible() {
   local ip_address="$1"
   local username="$2"
+  local proxy_jump="${3:-}"
   local attempt=0
   
   while [[ ${attempt} -lt ${MAX_RETRY_ATTEMPTS} ]]; do
     attempt=$((attempt + 1))
     
-    if ssh -o ConnectTimeout=10 -o BatchMode=yes -o StrictHostKeyChecking=no "${username}@${ip_address}" "echo 'accessible'" > /dev/null 2>&1; then
-      log "VM ${ip_address} is accessible"
-      return 0
+    if [[ -n "${proxy_jump}" ]]; then
+      if ssh -o ConnectTimeout=10 -o BatchMode=yes -o StrictHostKeyChecking=no -o ProxyJump="${proxy_jump}" "${username}@${ip_address}" "echo 'accessible'" > /dev/null 2>&1; then
+        log "VM ${ip_address} is accessible"
+        return 0
+      fi
+    else
+      if ssh -o ConnectTimeout=10 -o BatchMode=yes -o StrictHostKeyChecking=no "${username}@${ip_address}" "echo 'accessible'" > /dev/null 2>&1; then
+        log "VM ${ip_address} is accessible"
+        return 0
+      fi
     fi
     
     log "Attempt ${attempt}/${MAX_RETRY_ATTEMPTS}: VM not accessible yet, waiting ${RETRY_DELAY_SECONDS}s..."
@@ -380,6 +501,50 @@ wait_for_vm_accessible() {
   
   log_error "VM ${ip_address} did not become accessible after ${MAX_RETRY_ATTEMPTS} attempts"
   return 1
+}
+
+# Deploy MongoDB connection string to web server
+deploy_mongodb_connection_string() {
+  local web_server_ip="$1"
+  local connection_string="$2"
+  
+  if [[ -z "${connection_string}" ]]; then
+    log_warning "MongoDB connection string not available, skipping deployment"
+    return 0
+  fi
+  
+  log "Deploying MongoDB connection string to web server..."
+  
+  # Create appsettings.Production.json content (matching appsettings.json structure)
+  local appsettings_content="{
+  \"ConnectionStrings\": {
+    \"MongoDB\": \"${connection_string}\"
+  },
+  \"MongoDB\": {
+    \"DatabaseName\": \"TodoAppDb\"
+  }
+}"
+  
+  # Deploy via SSH through bastion
+  local bastion_ip
+  bastion_ip=$(get_vm_public_ip "${BASTION_HOST_NAME}")
+  
+  if [[ -z "${bastion_ip}" ]]; then
+    log_error "Bastion IP not available"
+    return 1
+  fi
+  
+  # Use ProxyJump to reach web server
+  if ssh -o StrictHostKeyChecking=no -o ProxyJump="${ADMIN_USERNAME}@${bastion_ip}" "${ADMIN_USERNAME}@${web_server_ip}" \
+    "sudo mkdir -p /opt/GithubActionsTodoApp && \
+      sudo tee /opt/GithubActionsTodoApp/appsettings.Production.json > /dev/null && \
+      sudo chown www-data:www-data /opt/GithubActionsTodoApp/appsettings.Production.json && \
+      sudo chmod 600 /opt/GithubActionsTodoApp/appsettings.Production.json" <<< "${appsettings_content}"; then
+    log "MongoDB connection string deployed successfully"
+  else
+    log_error "Failed to deploy MongoDB connection string"
+    return 1
+  fi
 }
 
 # =============================================================================
@@ -503,11 +668,19 @@ display_cosmos_db_info() {
       echo "Database Name: ${cosmos_db_name}"
       echo "Collection Name: ${cosmos_collection_name}"
       echo ""
-      echo "Connection String Format:"
-      echo "mongodb+srv://${cosmos_endpoint}?ssl=true"
-      echo ""
-      log "Note: You need to get the Cosmos DB password from Azure Portal:"
-      log "az cosmosdb list-keys --name <cosmos-db-name> --resource-group ${RESOURCE_GROUP}"
+      
+      if [[ -n "${MONGODB_CONNECTION_STRING}" ]]; then
+        echo "MongoDB Connection String:"
+        echo "${MONGODB_CONNECTION_STRING}"
+        echo ""
+        log "Connection string has been automatically generated and configured"
+      else
+        echo "To get the connection string, run:"
+        echo "  az cosmosdb keys list --name <cosmos-db-name> --resource-group ${RESOURCE_GROUP}"
+        echo ""
+        echo "Then build the connection string:"
+        echo "mongodb://<account-name>:<primaryMasterKey>@<account-name>.documents.azure.com:10255/?ssl=true&retryWrites=true&w=majority"
+      fi
     else
       log_warning "Cosmos DB information not available yet"
     fi

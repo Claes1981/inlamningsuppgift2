@@ -36,6 +36,10 @@ write_files:
     permissions: '0644'
 
 runcmd:
+  # Create application directory
+  - mkdir -p /opt/GithubActionsTodoApp
+  - chown www-data:www-data /opt/GithubActionsTodoApp
+
   # Register Microsoft repository (which includes .Net Runtime 10.0 package)
   - wget -q https://packages.microsoft.com/config/ubuntu/24.04/packages-microsoft-prod.deb -O packages-microsoft-prod.deb
   - dpkg -i packages-microsoft-prod.deb
@@ -58,10 +62,10 @@ runcmd:
   - systemctl enable ssh || true
   - systemctl start ssh || true
 
-  # Download and configure GitHub Actions runner
+  # Download and configure GitHub Actions runner with retry
   - mkdir -p /home/azureuser/actions-runner
-  - curl -o /tmp/actions-runner-linux-x64-2.333.0.tar.gz -L https://github.com/actions/runner/releases/download/v2.333.0/actions-runner-linux-x64-2.333.0.tar.gz
-  - echo "7ce6b3fd8f879797fcc252c2918a23e14a233413dc6e6ab8e0ba8768b5d54475  actions-runner-linux-x64-2.333.0.tar.gz" | shasum -a 256 -c
+  - until curl -o /tmp/actions-runner-linux-x64-2.333.0.tar.gz -L --connect-timeout 30 --max-time 120 https://github.com/actions/runner/releases/download/v2.333.0/actions-runner-linux-x64-2.333.0.tar.gz; do echo "Retrying download..."; sleep 5; done
+  - echo "7ce6b3fd8f879797fcc252c2918a23e14a233413dc6e6ab8e0ba8768b5d54475  /tmp/actions-runner-linux-x64-2.333.0.tar.gz" | shasum -a 256 -c
   - tar xzf /tmp/actions-runner-linux-x64-2.333.0.tar.gz -C /home/azureuser/actions-runner
   - chown -R azureuser:azureuser /home/azureuser/actions-runner
   - chmod +x /home/azureuser/actions-runner/config.sh
