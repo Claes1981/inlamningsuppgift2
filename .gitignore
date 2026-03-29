@@ -74,3 +74,5 @@ infra/actions-runner
 
 tests/Infrastructure.Tests/TestResults
 tests/TodoApp.Tests/TestResults
+
+publish
