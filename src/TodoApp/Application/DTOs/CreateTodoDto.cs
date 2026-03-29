@@ -21,4 +21,10 @@ public class CreateTodoDto
     /// </summary>
     [StringLength(1000, ErrorMessage = "Description cannot exceed 1000 characters.")]
     public string? Description { get; set; }
+
+    /// <summary>
+    /// Category for the todo item. Used as shard key in Cosmos DB. Optional, defaults to "general".
+    /// </summary>
+    [StringLength(50, ErrorMessage = "Category cannot exceed 50 characters.")]
+    public string? Category { get; set; }
 }

@@ -36,4 +36,9 @@ public record TodoDto
     /// Date and time when the todo item was last updated.
     /// </summary>
     public DateTime UpdatedAt { get; init; }
+
+    /// <summary>
+    /// Category for the todo item. Used as shard key in Cosmos DB.
+    /// </summary>
+    public string Category { get; init; } = "general";
 }

@@ -65,7 +65,7 @@ public class TodoService : ITodoService
         }
 
         // Domain entity will perform additional validation
-        var todo = new Todo(dto.Title, dto.Description);
+        var todo = new Todo(dto.Title, dto.Description, dto.Category);
         var createdTodo = await _todoRepository.AddAsync(todo);
         return MapToDto(createdTodo);
     }
@@ -104,6 +104,12 @@ public class TodoService : ITodoService
             todo.MarkAsNotCompleted();
         }
 
+        // Update category if provided
+        if (!string.IsNullOrWhiteSpace(dto.Category))
+        {
+            todo.SetCategory(dto.Category);
+        }
+
         var updatedTodo = await _todoRepository.UpdateAsync(todo);
         return MapToDto(updatedTodo);
     }
@@ -133,7 +139,8 @@ public class TodoService : ITodoService
             Description = todo.Description,
             IsCompleted = todo.IsCompleted,
             CreatedAt = todo.CreatedAt,
-            UpdatedAt = todo.UpdatedAt
+            UpdatedAt = todo.UpdatedAt,
+            Category = todo.Category
         };
     }
 }

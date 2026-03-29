@@ -40,18 +40,25 @@ public class Todo
     public DateTime UpdatedAt { get; private set; } = DateTime.UtcNow;
 
     /// <summary>
+    /// Category for the todo item. Used as shard key in Cosmos DB.
+    /// </summary>
+    public string Category { get; private set; } = "general";
+
+    /// <summary>
     /// Creates a new todo item with validation.
     /// </summary>
     /// <param name="title">The title of the todo item.</param>
     /// <param name="description">Optional description of the todo item.</param>
+    /// <param name="category">Optional category for sharding. Defaults to "general".</param>
     /// <exception cref="ArgumentException">Thrown when title is invalid.</exception>
-    public Todo(string title, string? description = null)
+    public Todo(string title, string? description = null, string? category = "general")
     {
         ValidateTitle(title);
         ValidateDescription(description);
 
         Title = title.Trim();
         Description = description?.Trim();
+        Category = category?.Trim() ?? "general";
         CreatedAt = DateTime.UtcNow;
         UpdatedAt = DateTime.UtcNow;
     }
@@ -94,6 +101,16 @@ public class Todo
 
         Title = title.Trim();
         Description = description?.Trim();
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    /// <summary>
+    /// Sets the category for the todo item.
+    /// </summary>
+    /// <param name="category">The category to set.</param>
+    public void SetCategory(string category)
+    {
+        Category = category.Trim();
         UpdatedAt = DateTime.UtcNow;
     }
 

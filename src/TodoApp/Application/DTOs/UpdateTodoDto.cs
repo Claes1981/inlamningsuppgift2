@@ -32,4 +32,10 @@ public class UpdateTodoDto
     /// Indicates whether the todo item is completed.
     /// </summary>
     public bool IsCompleted { get; set; }
+
+    /// <summary>
+    /// Category for the todo item. Used as shard key in Cosmos DB. Optional.
+    /// </summary>
+    [StringLength(50, ErrorMessage = "Category cannot exceed 50 characters.")]
+    public string? Category { get; set; }
 }
