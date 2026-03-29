@@ -478,6 +478,7 @@ resource database 'Microsoft.DocumentDB/databaseAccounts/mongodbDatabases@2024-0
   }
 }
 
+// Triggered redeployment - 2026-03-29 13:30 CEST
 resource collection 'Microsoft.DocumentDB/databaseAccounts/mongodbDatabases/collections@2024-05-15' = {
   parent: database
   name: collectionName
